@@ -47,12 +47,36 @@ export interface GameInstance {
   triggerDuck?: () => void;
   triggerStandUp?: () => void;
   setTilt?: (angle: number) => void;
-  restartWithTheme?: (theme: string) => void;
+  restartWithTheme?: (theme: any) => void;
   pause: () => void;
   resume: () => void;
   destroy: () => void;
   onGameOver: (callback: (score: number) => void) => void;
   getScore: () => number;
+}
+
+// ── Friends system types ──────────────────────────────────────────
+export interface Friendship {
+  id: string;
+  user_id: string;
+  friend_id: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  friend_profile: {
+    id: string;
+    username: string;
+  } | null;
+}
+
+export interface FriendScoreComparison {
+  game: string;
+  my_best_score: number;
+  friend_best_score: number;
+}
+
+export interface UserSearchResult {
+  id: string;
+  username: string;
 }
 
 // ── Game metadata for the menu ────────────────────────────────────

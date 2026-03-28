@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useCamera } from '@/src/hooks/useCamera';
-import { useInputMode } from '@/src/hooks/useInputMode';
-import { usePoseDetection } from '@/src/ai/usePoseDetection';
-import type { Game, GameInstance } from '@/src/lib/types';
+import { useCamera } from '../../hooks/useCamera';
+import { useInputMode } from '../../hooks/useInputMode';
+import { usePoseDetection } from '../../ai/usePoseDetection';
+import type { Game, GameInstance } from '../../lib/types';
 import { Pause, Play, Camera } from 'lucide-react';
 
 // ── Diagnostic prefix ────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
           }
           case 'dino': {
             const { DinoGame } = await import('@/src/games/dino/DinoGame');
-            game = new DinoGame(containerRef.current);
+            game = new DinoGame(containerRef.current as HTMLElement);
             break;
           }
           case 'ironboard': {
@@ -276,6 +276,7 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('mousemove', handleMouseMove);
+      containerRef.current?.removeEventListener('click', handleClick);
     };
   }, [inputMode, gameId]);
 
