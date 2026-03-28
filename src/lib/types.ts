@@ -45,7 +45,9 @@ export interface GameInstance {
   triggerFlap?: () => void;
   triggerJump?: () => void;
   triggerDuck?: () => void;
+  triggerStandUp?: () => void;
   setTilt?: (angle: number) => void;
+  restartWithTheme?: (theme: string) => void;
   pause: () => void;
   resume: () => void;
   destroy: () => void;
