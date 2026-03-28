@@ -7,7 +7,11 @@ import { GameCard } from '@/src/components/ui/GameCard';
 import { GameCard3D } from '@/src/components/ui/GameCard3D';
 import { HandCursor } from '@/src/components/ui/HandCursor';
 import { AuthModal } from '@/src/components/ui/AuthModal';
+import { FriendsPanel } from '@/src/components/ui/FriendsPanel';
+import { FriendScoreComparison } from '@/src/components/ui/FriendScoreComparison';
+import { getPendingRequests, subscribeFriendships } from '@/src/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
+import { Users } from 'lucide-react';
 
 const GAMES = [
   { title: 'Flappy Bird', emoji: '🐦', slug: 'flappy', description: 'Sube los hombros para volar' },
@@ -30,7 +34,7 @@ export default function HomePage() {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
-  const [inputMode, setInputMode] = useState<'mouse' | 'camera  '>('mouse');
+  const [inputMode, setInputMode] = useState<'mouse' | 'camera'>('mouse');
 
   // 3D carousel state
   const [centerIndex, setCenterIndex] = useState(1);
@@ -47,6 +51,11 @@ export default function HomePage() {
 
   const mediapipeCamRef = useRef<any>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  // Friends system state
+  const [showFriendsPanel, setShowFriendsPanel] = useState(false);
+  const [comparisonFriend, setComparisonFriend] = useState<{ id: string; name: string } | null>(null);
+  const [pendingFriendsCount, setPendingFriendsCount] = useState(0);
 
   // ── Helpers ─────────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
@@ -92,6 +101,27 @@ export default function HomePage() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // ── Friends system effects ──────────────────────────────────────
+  useEffect(() => {
+    if (!session?.user) return;
+
+    // Initial fetch
+    void getPendingRequests().then((reqs) => {
+      setPendingFriendsCount(reqs.length);
+    });
+
+    // Real-time updates
+    const channel = subscribeFriendships(() => {
+      void getPendingRequests().then((reqs) => {
+        setPendingFriendsCount(reqs.length);
+      });
+    });
+
+    return () => {
+      void channel.unsubscribe();
+    };
+  }, [session]);
 
   // ── Draw hand skeleton (21 MediaPipe landmarks) ─────────────────
   const drawHandSkeleton = useCallback(
@@ -358,25 +388,42 @@ export default function HomePage() {
             </span>
           )}
 
+          {/* Friends button */}
+          <button
+            id="friends-toggle-btn"
+            onClick={() => setShowFriendsPanel(true)}
+            className="relative p-2 bg-gray-800 rounded-xl text-gray-400 hover:text-white hover:bg-gray-700 transition-all cursor-pointer"
+            title="Amigos"
+          >
+            <Users className="w-5 h-5" />
+            {pendingFriendsCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-gray-950 badge-pulse">
+                {pendingFriendsCount}
+              </span>
+            )}
+          </button>
+
           {/* Mode toggle */}
           <div className="flex bg-gray-800 rounded-xl p-1 gap-1">
             <button
               id="mode-mouse-btn"
               onClick={() => setInputMode('mouse')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${inputMode === 'mouse'
-                ? 'bg-purple-600 text-white shadow-lg'
-                : 'text-gray-400 hover:text-white'
-                }`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                inputMode === 'mouse'
+                  ? 'bg-purple-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white'
+              }`}
             >
               🖱️ Mouse
             </button>
             <button
               id="mode-camera-btn"
               onClick={() => setInputMode('camera')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${inputMode === 'camera'
-                ? 'bg-green-600 text-white shadow-lg shadow-green-500/30'
-                : 'text-gray-400 hover:text-white'
-                }`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                inputMode === 'camera'
+                  ? 'bg-green-600 text-white shadow-lg shadow-green-500/30'
+                  : 'text-gray-400 hover:text-white'
+              }`}
             >
               📷 Cámara
             </button>
@@ -421,8 +468,9 @@ export default function HomePage() {
           <div className="w-72 flex-shrink-0 flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <div
-                className={`w-2 h-2 rounded-full transition-colors ${cameraReady ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'
-                  }`}
+                className={`w-2 h-2 rounded-full transition-colors ${
+                  cameraReady ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'
+                }`}
               />
               <span className="text-sm text-gray-400">
                 {cameraReady ? 'Mano detectada ✋' : 'Iniciando cámara...'}
@@ -495,13 +543,35 @@ export default function HomePage() {
                     confirmStartRef.current = null;
                     setConfirmProgress(0);
                   }}
-                  className={`w-3 h-3 rounded-full transition-all cursor-pointer ${idx === centerIndex ? 'bg-green-400 scale-125' : 'bg-gray-600 hover:bg-gray-400'
-                    }`}
+                  className={`w-3 h-3 rounded-full transition-all cursor-pointer ${
+                    idx === centerIndex ? 'bg-green-400 scale-125' : 'bg-gray-600 hover:bg-gray-400'
+                  }`}
                 />
               ))}
             </div>
           </div>
         </main>
+      )}
+
+      {/* ── Friends Overlays ── */}
+      {showFriendsPanel && (
+        <FriendsPanel
+          onClose={() => setShowFriendsPanel(false)}
+          pendingCount={pendingFriendsCount}
+          onPendingCountChange={setPendingFriendsCount}
+          onCompare={(id, name) => {
+            setComparisonFriend({ id, name });
+            setShowFriendsPanel(false);
+          }}
+        />
+      )}
+
+      {comparisonFriend && (
+        <FriendScoreComparison
+          friendId={comparisonFriend.id}
+          friendName={comparisonFriend.name}
+          onClose={() => setComparisonFriend(null)}
+        />
       )}
     </div>
   );
