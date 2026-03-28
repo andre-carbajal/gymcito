@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { GameWrapper } from '@/src/components/game/GameWrapper';
 import { Leaderboard } from '@/src/components/ui/Leaderboard';
@@ -22,6 +22,17 @@ export default function GamePage() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
+
+  const [isLandscape, setIsLandscape] = useState(true);
+
+  useEffect(() => {
+    function checkOrientation() {
+      setIsLandscape(window.innerWidth > window.innerHeight);
+    }
+    checkOrientation();
+    window.addEventListener('resize', checkOrientation);
+    return () => window.removeEventListener('resize', checkOrientation);
+  }, []);
 
   const { inputMode } = useInputMode();
   const [gameOver, setGameOver] = useState(false);
@@ -59,6 +70,21 @@ export default function GamePage() {
     setSaved(false);
     setGameKey((k) => k + 1);
   };
+
+  // Si está en vertical, mostrar pantalla de "gira el dispositivo":
+  if (!isLandscape) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-white text-center p-8">
+        <span className="text-8xl mb-6 animate-spin" style={{ animationDuration: '2s' }}>📱</span>
+        <h2 className="text-2xl font-bold font-mono mb-3">
+          Gira tu dispositivo
+        </h2>
+        <p className="text-gray-400">
+          Este juego requiere modo horizontal (landscape)
+        </p>
+      </div>
+    );
+  }
 
   // Invalid game slug
   if (!gameId) {

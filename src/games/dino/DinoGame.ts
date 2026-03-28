@@ -100,6 +100,9 @@ class DinoScene extends Phaser.Scene {
     this.isGameOver = false;
     this.isPaused = false;
     this.obstacles = [];
+
+    const cb = (this.game as any).gymcitoGameOverCallback;
+    if (cb) this.gameOverCallback = cb;
   }
 
   update(_time: number, delta: number): void {
@@ -256,7 +259,7 @@ class DinoScene extends Phaser.Scene {
 
 // ── DinoGame wrapper class ────────────────────────────────────────
 export class DinoGame implements GameInstance {
-  private game: Phaser.Game | null = null;
+  private phaserGame: Phaser.Game | null = null;
   private scene: DinoScene | null = null;
   private gameOverCb: ((score: number) => void) | null = null;
 
@@ -266,7 +269,7 @@ export class DinoGame implements GameInstance {
     const scene = new DinoScene();
     this.scene = scene;
 
-    this.game = new Phaser.Game({
+    this.phaserGame = new Phaser.Game({
       type: Phaser.CANVAS,
       width: GAME_WIDTH,
       height: GAME_HEIGHT,
@@ -277,12 +280,13 @@ export class DinoGame implements GameInstance {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
       },
-    });
-
-    scene.events.once('create', () => {
-      if (this.gameOverCb) {
-        scene.gameOverCallback = this.gameOverCb;
-      }
+      callbacks: {
+        postBoot: (game: Phaser.Game) => {
+          if (this.gameOverCb) {
+            (game as any).gymcitoGameOverCallback = this.gameOverCb;
+          }
+        },
+      },
     });
   }
 
@@ -296,8 +300,10 @@ export class DinoGame implements GameInstance {
 
   onGameOver(callback: (score: number) => void): void {
     this.gameOverCb = callback;
-    if (this.scene) {
-      this.scene.gameOverCallback = callback;
+    if (this.phaserGame) {
+      const scene = this.phaserGame.scene.getScene('DinoScene') as any;
+      if (scene) scene.gameOverCallback = callback;
+      (this.phaserGame as any).gymcitoGameOverCallback = callback;
     }
   }
 
@@ -314,8 +320,9 @@ export class DinoGame implements GameInstance {
   }
 
   destroy(): void {
-    this.game?.destroy(true);
-    this.game = null;
+    this.phaserGame?.destroy(true);
+    this.phaserGame = null;
+    this.gameOverCb = null;
     this.scene = null;
   }
 }

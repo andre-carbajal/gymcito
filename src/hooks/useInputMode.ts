@@ -9,15 +9,21 @@ interface UseInputModeReturn {
 }
 
 export function useInputMode(): UseInputModeReturn {
-  const [inputMode, setInputMode] = useState<InputMode>('mouse');
+  const [inputMode, setInputMode] = useState<InputMode>('camera');
 
-  // Auto-detect on mount
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const isTouch = window.matchMedia('(pointer: coarse)').matches;
-    setInputMode(isTouch ? 'touch' : 'mouse');
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gymcito_input_mode') as InputMode;
+      if (saved) setInputMode(saved);
+    }
   }, []);
 
-  return { inputMode, setInputMode };
+  const setAndSaveInputMode = (mode: InputMode) => {
+    setInputMode(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('gymcito_input_mode', mode);
+    }
+  };
+
+  return { inputMode, setInputMode: setAndSaveInputMode };
 }

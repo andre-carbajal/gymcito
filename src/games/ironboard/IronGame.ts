@@ -1,357 +1,496 @@
 import * as Phaser from 'phaser';
 import type { GameInstance } from '@/src/lib/types';
 
-// ── Constants ─────────────────────────────────────────────────────
-const GAME_WIDTH = 400;
-const GAME_HEIGHT = 600;
-const PLAYER_WIDTH = 30;
-const PLAYER_HEIGHT = 50;
-const PLAYER_Y = 520;
-const BASE_SPEED = 200;
-const SPEED_INCREMENT = 0.35;
-const PERFECT_THRESHOLD = 0.15; // angle threshold for "perfect posture"
-const PERFECT_BONUS_INTERVAL = 500; // ms between perfect posture bonuses
+export class IronGame implements GameInstance {
+  private phaserGame: Phaser.Game | null = null;
+  private gameOverCb: ((score: number) => void) | null = null;
 
-// ── Iron Scene ────────────────────────────────────────────────────
+  constructor(containerId: HTMLElement) {
+    if (typeof window === 'undefined') return;
+
+    const W = Math.floor(window.innerWidth * 0.6);
+    const H = window.innerHeight;
+
+    const config: Phaser.Types.Core.GameConfig = {
+      type: Phaser.CANVAS,
+      width: W,
+      height: H,
+      parent: containerId,
+      backgroundColor: '#000510',
+      physics: {
+        default: 'arcade',
+        arcade: { gravity: { x: 0, y: 0 }, debug: false }
+      },
+      scene: [IronScene],
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+      },
+      callbacks: {
+        postBoot: (game: Phaser.Game) => {
+          if (this.gameOverCb) {
+            (game as any).gymcitoGameOverCallback = this.gameOverCb;
+          }
+        }
+      }
+    };
+    this.phaserGame = new Phaser.Game(config);
+  }
+
+  setTilt(angle: number) {
+    if (!this.phaserGame) return;
+    const scene = this.phaserGame.scene.getScene('IronScene') as any;
+    if (scene) scene.currentTilt = angle;
+  }
+
+  onGameOver(callback: (score: number) => void) {
+    this.gameOverCb = callback;
+    if (this.phaserGame) {
+      const scene = this.phaserGame.scene.getScene('IronScene') as any;
+      if (scene) scene.gameOverCallback = callback;
+      (this.phaserGame as any).gymcitoGameOverCallback = callback;
+    }
+  }
+
+  pause(): void {
+    if (this.phaserGame) {
+      const scene = this.phaserGame.scene.getScene('IronScene');
+      if (scene) scene.scene.pause();
+    }
+  }
+
+  resume(): void {
+    if (this.phaserGame) {
+      const scene = this.phaserGame.scene.getScene('IronScene');
+      if (scene) scene.scene.resume();
+    }
+  }
+
+  getScore(): number {
+    if (this.phaserGame) {
+      const scene = this.phaserGame.scene.getScene('IronScene') as any;
+      if (scene) return scene.score || 0;
+    }
+    return 0;
+  }
+
+  destroy() {
+    this.phaserGame?.destroy(true);
+    this.phaserGame = null;
+  }
+}
+
 class IronScene extends Phaser.Scene {
-  private player!: Phaser.GameObjects.Rectangle;
-  private board!: Phaser.GameObjects.Rectangle;
-  private obstacles: Phaser.GameObjects.Rectangle[] = [];
-  private particles: Phaser.GameObjects.Rectangle[] = [];
+  private ship!: Phaser.GameObjects.Container;
+  private shipBody!: Phaser.GameObjects.Graphics;
+  private asteroids!: Phaser.Physics.Arcade.Group;
   private scoreText!: Phaser.GameObjects.Text;
-  private perfectText!: Phaser.GameObjects.Text;
-  private laneLines: Phaser.GameObjects.Rectangle[] = [];
+  public postureText!: Phaser.GameObjects.Text;
+  private tiltIndicator!: Phaser.GameObjects.Graphics;
+  private bonusText!: Phaser.GameObjects.Text;
 
-  private tilt = 0; // -1 to 1
-  private score = 0;
-  private speed = BASE_SPEED;
-  private obstacleTimer = 0;
-  private obstacleInterval = 1200;
-  private isGameOver = false;
-  private elapsed = 0;
-  private perfectTimer = 0;
-  private perfectStreak = 0;
-  private showPerfect = false;
-  private perfectFadeTimer = 0;
-
+  public currentTilt: number = 0;
   public gameOverCallback: ((score: number) => void) | null = null;
-  public isPaused = false;
+
+  public score: number = 0;
+  private isGameOver: boolean = false;
+  private asteroidSpeed: number = 180;
+  private perfectPostureAccum: number = 0;
+  private lastSpeedIncrease: number = 0;
+  private shipVelocityX: number = 0;
+
+  private gameTime: number = 0;
+  private spawnAccum: number = 0;
+  private edgeTimer: number = 0;
+  private lastEdgeSide: 'left' | 'right' | null = null;
+  private readonly EDGE_THRESHOLD = 80;
+  private readonly EDGE_PUNISH_MS = 3000;
 
   constructor() {
     super({ key: 'IronScene' });
   }
 
-  create(): void {
-    this.cameras.main.setBackgroundColor('#0f0f23');
+  preload() {
+    const asteroidSizes = [56, 36, 84];
+    const asteroidColors = [
+      { body: '#7a7a7a', crater: '#505050' },
+      { body: '#9a9a9a', crater: '#707070' },
+      { body: '#5a5a5a', crater: '#353535' },
+    ];
 
-    // Lane lines for visual depth
-    const laneCount = 5;
-    this.laneLines = [];
-    for (let i = 0; i < laneCount; i++) {
-      const x = (GAME_WIDTH / (laneCount + 1)) * (i + 1);
-      const line = this.add.rectangle(x, GAME_HEIGHT / 2, 1, GAME_HEIGHT, 0x1a1a3e);
-      line.setAlpha(0.3);
-      this.laneLines.push(line);
+    for (let variant = 0; variant < 3; variant++) {
+      const key = `asteroid_${variant}`;
+      if (this.textures.exists(key)) continue;
+
+      const size = asteroidSizes[variant];
+      const colors = asteroidColors[variant];
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d')!;
+      const cx = size / 2;
+      const cy = size / 2;
+
+      // Forma irregular del asteroide
+      const sides = 9;
+      const offsets = [1.0, 0.82, 0.95, 0.78, 1.0, 0.85, 0.92, 0.80, 0.96];
+      ctx.beginPath();
+      for (let i = 0; i <= sides; i++) {
+        const a = (i / sides) * Math.PI * 2;
+        const r = (size / 2 - 4) * offsets[i % sides];
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+
+      // Sombra exterior
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur = 6;
+      ctx.fillStyle = colors.body;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Borde oscuro
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Cráteres
+      const craterCount = variant === 2 ? 4 : 2;
+      const craterData = [
+        { cx: size*0.35, cy: size*0.38, r: size*0.10 },
+        { cx: size*0.62, cy: size*0.55, r: size*0.07 },
+        { cx: size*0.45, cy: size*0.65, r: size*0.08 },
+        { cx: size*0.25, cy: size*0.58, r: size*0.06 },
+      ];
+      for (let c = 0; c < craterCount; c++) {
+        const cd = craterData[c];
+        ctx.beginPath();
+        ctx.arc(cd.cx, cd.cy, cd.r, 0, Math.PI * 2);
+        ctx.fillStyle = colors.crater;
+        ctx.fill();
+        // Brillo del cráter
+        ctx.beginPath();
+        ctx.arc(cd.cx - cd.r*0.2, cd.cy - cd.r*0.2, cd.r * 0.35, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fill();
+      }
+
+      // Highlight general
+      ctx.beginPath();
+      ctx.ellipse(size*0.3, size*0.27, size*0.12, size*0.07, -0.4, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fill();
+
+      // Registrar textura en Phaser
+      this.textures.addCanvas(key, canvas);
+    }
+  }
+
+  create() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+
+    // Fondo estrellado
+    const stars = this.add.graphics();
+    for (let i = 0; i < 200; i++) {
+      const x = Phaser.Math.Between(0, W);
+      const y = Phaser.Math.Between(0, H);
+      const r = Math.random() > 0.85 ? 2 : 1;
+      stars.fillStyle(0xffffff, 0.3 + Math.random() * 0.7);
+      stars.fillCircle(x, y, r);
     }
 
-    // Board
-    this.board = this.add.rectangle(
-      GAME_WIDTH / 2,
-      PLAYER_Y + PLAYER_HEIGHT / 2 + 8,
-      PLAYER_WIDTH + 30,
-      8,
-      0x06b6d4,
+    // Nave
+    this.ship = this.add.container(W / 2, H - 100);
+    this.shipBody = this.add.graphics();
+    this.drawShip(false);
+    this.ship.add(this.shipBody);
+    this.physics.add.existing(this.ship);
+    const shipBody = this.ship.body as Phaser.Physics.Arcade.Body;
+    shipBody.setCollideWorldBounds(true);
+    shipBody.setSize(40, 50);
+
+    // Asteroides
+    this.asteroids = this.physics.add.group({ enableBody: false } as any);
+
+    // UI
+    this.scoreText = this.add.text(16, 16, 'Score: 0', {
+      fontSize: '24px', color: '#ffffff',
+      fontFamily: 'monospace',
+      stroke: '#000000', strokeThickness: 4
+    }).setDepth(10);
+
+    this.postureText = this.add.text(W / 2, 16, '', {
+      fontSize: '18px', color: '#00ff88',
+      fontFamily: 'monospace'
+    }).setOrigin(0.5, 0).setDepth(10);
+
+    this.tiltIndicator = this.add.graphics().setDepth(10);
+
+    this.bonusText = this.add.text(W / 2, H / 2, '', {
+      fontSize: '32px', color: '#FFD700',
+      fontFamily: 'monospace',
+      stroke: '#000', strokeThickness: 5
+    }).setOrigin(0.5).setDepth(20).setAlpha(0);
+
+    // Generador de asteroides
+    this.time.addEvent({
+      delay: 50,
+      callback: () => {
+        if (this.isGameOver) return;
+        // Calcular delay actual según dificultad
+        const currentDelay = Math.max(400, 1200 - Math.floor(this.gameTime / 10000) * 100);
+        // Usar un acumulador manual
+        this.spawnAccum = (this.spawnAccum || 0) + 50;
+        if (this.spawnAccum >= currentDelay) {
+          this.spawnAccum = 0;
+          this.spawnAsteroid();
+        }
+      },
+      loop: true
+    });
+
+    // Score por tiempo
+    this.time.addEvent({
+      delay: 100,
+      callback: () => {
+        if (!this.isGameOver) {
+          this.score += 1;
+          this.scoreText.setText(`Score: ${this.score}`);
+        }
+      },
+      loop: true
+    });
+
+    // Colisión
+    this.physics.add.overlap(
+      this.ship,
+      this.asteroids,
+      () => this.handleCollision(),
+      undefined,
+      this
     );
 
-    // Player
-    this.player = this.add.rectangle(
-      GAME_WIDTH / 2,
-      PLAYER_Y,
-      PLAYER_WIDTH,
-      PLAYER_HEIGHT,
-      0x22c55e,
-    );
+    // Recuperar callback
+    const cb = (this.game as any).gymcitoGameOverCallback;
+    if (cb) this.gameOverCallback = cb;
 
-    // Score
-    this.scoreText = this.add.text(GAME_WIDTH / 2, 30, '0', {
-      fontFamily: '"Press Start 2P", monospace',
-      fontSize: '20px',
-      color: '#ffffff',
+    // Primer asteroide después de 500ms para dar tiempo a cargar
+    this.time.delayedCall(500, () => {
+      this.spawnAsteroid();
     });
-    this.scoreText.setOrigin(0.5);
-
-    // Perfect posture text
-    this.perfectText = this.add.text(GAME_WIDTH / 2, 70, '✨ PERFECT! ✨', {
-      fontFamily: '"Press Start 2P", monospace',
-      fontSize: '12px',
-      color: '#fbbf24',
-    });
-    this.perfectText.setOrigin(0.5);
-    this.perfectText.setAlpha(0);
-
-    this.resetState();
   }
 
-  private resetState(): void {
-    this.tilt = 0;
-    this.score = 0;
-    this.speed = BASE_SPEED;
-    this.obstacleTimer = 0;
-    this.elapsed = 0;
-    this.isGameOver = false;
-    this.isPaused = false;
-    this.perfectTimer = 0;
-    this.perfectStreak = 0;
-    this.obstacles = [];
-    this.particles = [];
+  drawShip(hit: boolean) {
+    this.shipBody.clear();
+    this.shipBody.fillStyle(hit ? 0xff4444 : 0x4488ff, 1);
+    this.shipBody.fillTriangle(0, -28, -22, 22, 22, 22);
+    this.shipBody.fillStyle(0xff6600, 1);
+    this.shipBody.fillRect(-10, 20, 20, 10);
+    this.shipBody.fillStyle(0x88ccff, 0.9);
+    this.shipBody.fillCircle(0, -6, 9);
+    this.shipBody.fillStyle(0xff9900, 0.4);
+    this.shipBody.fillRect(-14, 28, 28, 7);
   }
 
-  update(_time: number, delta: number): void {
-    if (this.isGameOver || this.isPaused) return;
+  spawnAsteroid() {
+    if (this.isGameOver) return;
+    const W = this.scale.width;
+    const x = Phaser.Math.Between(40, W - 40);
+    this.spawnAsteroidAt(x, this.asteroidSpeed);
+  }
 
-    const dt = delta / 1000;
-    this.elapsed += dt;
+  spawnAsteroidAt(x: number, speed: number) {
+    if (this.isGameOver) return;
 
-    // Progressive speed
-    this.speed = BASE_SPEED + this.elapsed * SPEED_INCREMENT * 60;
+    const variant = Phaser.Math.Between(0, 2);
+    const key = `asteroid_${variant}`;
+    if (!this.textures.exists(key)) return;
 
-    // Base score (time based)
-    this.score = Math.floor(this.elapsed * 8);
+    const sizes = [56, 36, 84];
+    const size = sizes[variant];
 
-    // Move player based on tilt
-    const targetX = GAME_WIDTH / 2 + this.tilt * (GAME_WIDTH / 2 - PLAYER_WIDTH);
-    this.player.x += (targetX - this.player.x) * 0.12;
-    this.board.x = this.player.x;
+    // 1. Crear sprite con física
+    const asteroid = this.physics.add.sprite(x, -size - 10, key);
+    asteroid.setDepth(5);
+    asteroid.setAngle(Phaser.Math.Between(0, 360));
+    asteroid.setAngularVelocity(Phaser.Math.Between(-80, 80));
 
-    // Clamp to bounds
-    this.player.x = Phaser.Math.Clamp(
-      this.player.x,
-      PLAYER_WIDTH / 2 + 10,
-      GAME_WIDTH - PLAYER_WIDTH / 2 - 10,
-    );
-    this.board.x = this.player.x;
+    // 2. Agregar al grupo ANTES de configurar velocidad
+    //    (el grupo ya no resetea porque enableBody:false)
+    this.asteroids.add(asteroid, false);
 
-    // Board tilt visual (rotate slightly)
-    this.board.setRotation(this.tilt * 0.2);
+    // 3. Configurar body DESPUÉS del add()
+    const body = asteroid.body as Phaser.Physics.Arcade.Body;
+    body.setSize(size * 0.65, size * 0.65);
 
-    // Perfect posture bonus
-    if (Math.abs(this.tilt) < PERFECT_THRESHOLD) {
-      this.perfectTimer += delta;
-      if (this.perfectTimer >= PERFECT_BONUS_INTERVAL) {
-        this.perfectTimer = 0;
-        this.perfectStreak++;
-        this.score += 5 * this.perfectStreak;
-        this.showPerfectNotice();
+    // 35% apunta hacia la nave
+    if (Math.random() < 0.35 && this.ship) {
+      const dx = this.ship.x - x;
+      const dy = this.scale.height + 150;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      body.setVelocityX((dx / dist) * speed * 0.6);
+      body.setVelocityY((dy / dist) * speed * 1.1);
+    } else {
+      body.setVelocityX(Phaser.Math.Between(-40, 40));
+      body.setVelocityY(speed);
+    }
+  }
 
-        // Spawn particle effect
-        this.spawnPerfectParticles();
+  update(_time: number, delta: number) {
+    if (this.isGameOver) return;
+    
+    this.gameTime += delta;
+
+    // Aumentar velocidad cada 15 segundos
+    const speedTier = Math.floor(this.gameTime / 15000);
+    const timeBonus = speedTier * 20;
+    
+    // También aumentar por score
+    const scoreBonus = Math.floor(this.score / 60) * 15;
+    
+    this.asteroidSpeed = Math.min(500, 180 + timeBonus + scoreBonus);
+    
+    const H = this.scale.height;
+    const W = this.scale.width;
+
+    // Mover nave con suavizado
+    const targetVX = this.currentTilt * 400;
+    this.shipVelocityX += (targetVX - this.shipVelocityX) * 0.12;
+    const body = this.ship.body as Phaser.Physics.Arcade.Body;
+    body.setVelocityX(this.shipVelocityX);
+    this.ship.setRotation(this.currentTilt * 0.28);
+
+    const isAtLeft = this.ship.x < this.EDGE_THRESHOLD;
+    const isAtRight = this.ship.x > W - this.EDGE_THRESHOLD;
+
+    if (isAtLeft || isAtRight) {
+      const side: 'left' | 'right' = isAtLeft ? 'left' : 'right';
+
+      if (this.lastEdgeSide === side) {
+        this.edgeTimer += delta;
+      } else {
+        this.edgeTimer = 0;
+        this.lastEdgeSide = side;
+      }
+
+      // Advertencia progresiva
+      const secondsLeft = Math.ceil((this.EDGE_PUNISH_MS - this.edgeTimer) / 1000);
+      if (this.edgeTimer > 500) {
+        this.postureText.setText(`⚠️ ¡Sal del borde! ${secondsLeft}s`);
+        this.postureText.setColor('#ff4444');
+      }
+
+      // Parpadeo de la nave al acercarse al límite
+      if (this.edgeTimer > 2000) {
+        this.ship.setAlpha(this.ship.alpha === 1 ? 0.4 : 1);
+      }
+
+      // Muerte instantánea al llegar a 3 segundos
+      if (this.edgeTimer >= this.EDGE_PUNISH_MS) {
+        this.handleCollision();
+        return;
       }
     } else {
-      this.perfectTimer = 0;
-      this.perfectStreak = 0;
-    }
-
-    // Perfect text fade
-    if (this.showPerfect) {
-      this.perfectFadeTimer -= delta;
-      if (this.perfectFadeTimer <= 0) {
-        this.showPerfect = false;
-        this.perfectText.setAlpha(0);
-      } else {
-        this.perfectText.setAlpha(this.perfectFadeTimer / 800);
+      this.edgeTimer = 0;
+      this.lastEdgeSide = null;
+      this.ship.setAlpha(1);
+      // Restaurar color del postureText si estaba en rojo
+      if (this.postureText.style.color === '#ff4444') {
+        this.postureText.setColor('#00ff88');
       }
     }
 
-    this.scoreText.setText(String(this.score));
-
-    // Obstacle spawn
-    this.obstacleTimer += delta;
-    const minInterval = Math.max(400, this.obstacleInterval - this.elapsed * 12);
-    if (this.obstacleTimer >= minInterval) {
-      this.obstacleTimer = 0;
-      this.spawnObstacle();
-    }
-
-    // Move obstacles
-    const toRemove: number[] = [];
-    for (let i = 0; i < this.obstacles.length; i++) {
-      const obs = this.obstacles[i];
-      obs.y += this.speed * dt;
-
-      // Scale effect (getting closer)
-      const progress = obs.y / GAME_HEIGHT;
-      const scale = 0.5 + progress * 0.8;
-      obs.setScale(scale);
-      obs.setAlpha(0.5 + progress * 0.5);
-
-      if (obs.y > GAME_HEIGHT + 50) {
-        toRemove.push(i);
+    // Postura perfecta
+    if (Math.abs(this.currentTilt) < 0.1) {
+      this.perfectPostureAccum += delta;
+      if (this.perfectPostureAccum >= 2000) {
+        this.score += 50;
+        this.perfectPostureAccum = 0;
+        this.showBonus('+50 ¡Postura Perfecta! 🏆');
       }
-
-      // Collision (only when near the player)
-      if (obs.y > PLAYER_Y - 40 && obs.y < PLAYER_Y + PLAYER_HEIGHT + 10) {
-        if (this.checkCollision(obs)) {
-          this.endGame();
-          return;
-        }
+      const p = this.perfectPostureAccum / 2000;
+      // Solo sobreescribir si no está en rojo por la advertencia
+      if (this.postureText.style.color !== '#ff4444') {
+        this.postureText.setText(`⬆️ Postura: ${Math.round(p * 100)}%`);
+      }
+    } else {
+      this.perfectPostureAccum = 0;
+      // Solo borrar si no está en rojo por la advertencia
+      if (this.postureText.style.color !== '#ff4444') {
+        this.postureText.setText('');
       }
     }
 
-    for (let i = toRemove.length - 1; i >= 0; i--) {
-      const idx = toRemove[i];
-      this.obstacles[idx].destroy();
-      this.obstacles.splice(idx, 1);
-    }
+    // Indicador de inclinación
+    this.drawTiltIndicator();
 
-    // Move particles
-    const particlesToRemove: number[] = [];
-    for (let i = 0; i < this.particles.length; i++) {
-      const p = this.particles[i];
-      p.y -= 60 * dt;
-      p.setAlpha(p.alpha - dt * 2);
-      if (p.alpha <= 0) {
-        particlesToRemove.push(i);
-      }
-    }
-    for (let i = particlesToRemove.length - 1; i >= 0; i--) {
-      const idx = particlesToRemove[i];
-      this.particles[idx].destroy();
-      this.particles.splice(idx, 1);
-    }
+    // Limpiar asteroides fuera de pantalla
+    this.asteroids.getChildren().forEach((obj: any) => {
+      if (obj.y > this.scale.height + 100) obj.destroy();
+    });
   }
 
-  private spawnObstacle(): void {
-    const width = Phaser.Math.Between(30, 70);
-    const height = Phaser.Math.Between(15, 30);
-    const x = Phaser.Math.Between(width / 2 + 20, GAME_WIDTH - width / 2 - 20);
-
-    const colors = [0xf43f5e, 0xa855f7, 0xf97316, 0xef4444];
-    const color = colors[Phaser.Math.Between(0, colors.length - 1)];
-
-    const rect = this.add.rectangle(x, -20, width, height, color);
-    rect.setAlpha(0.3);
-    this.obstacles.push(rect);
+  drawTiltIndicator() {
+    const g = this.tiltIndicator;
+    const H = this.scale.height;
+    g.clear();
+    const bx = 28, bH = 140, bY = H/2 - 70;
+    g.fillStyle(0x222222, 0.9);
+    g.fillRoundedRect(bx-10, bY, 20, bH, 10);
+    const iY = bY + bH/2 + this.currentTilt * bH/2;
+    const neutral = Math.abs(this.currentTilt) < 0.1;
+    g.fillStyle(neutral ? 0x00ff88 : 0xff6600, 1);
+    g.fillCircle(bx, iY, 9);
+    g.lineStyle(2, 0x444444, 1);
+    g.lineBetween(bx-12, bY+bH/2, bx+12, bY+bH/2);
   }
 
-  private spawnPerfectParticles(): void {
-    for (let i = 0; i < 5; i++) {
-      const p = this.add.rectangle(
-        this.player.x + Phaser.Math.Between(-20, 20),
-        this.player.y + Phaser.Math.Between(-10, 10),
-        4,
-        4,
-        0xfbbf24,
-      );
-      this.particles.push(p);
-    }
+  showBonus(text: string) {
+    const H = this.scale.height;
+    this.bonusText.setText(text);
+    this.bonusText.setAlpha(1).setY(H/2);
+    this.tweens.add({
+      targets: this.bonusText,
+      y: H/2 - 90, alpha: 0,
+      duration: 1800, ease: 'Power2'
+    });
   }
 
-  private showPerfectNotice(): void {
-    this.showPerfect = true;
-    this.perfectFadeTimer = 800;
-    this.perfectText.setAlpha(1);
-    this.perfectText.setText(
-      this.perfectStreak > 3
-        ? `🔥 STREAK x${this.perfectStreak}! 🔥`
-        : '✨ PERFECT! ✨',
-    );
-  }
-
-  private checkCollision(obs: Phaser.GameObjects.Rectangle): boolean {
-    const scale = obs.scaleX;
-    const ow = obs.width * scale;
-    const oh = obs.height * scale;
-
-    const px = this.player.x - PLAYER_WIDTH / 2;
-    const py = this.player.y - PLAYER_HEIGHT / 2;
-    const ox = obs.x - ow / 2;
-    const oy = obs.y - oh / 2;
-
-    return (
-      px < ox + ow &&
-      px + PLAYER_WIDTH > ox &&
-      py < oy + oh &&
-      py + PLAYER_HEIGHT > oy
-    );
-  }
-
-  private endGame(): void {
+  handleCollision() {
     if (this.isGameOver) return;
     this.isGameOver = true;
-    this.cameras.main.flash(200, 255, 0, 0);
+    const W = this.scale.width;
+    const H = this.scale.height;
 
-    if (this.gameOverCallback) {
-      this.gameOverCallback(this.score);
-    }
-  }
+    this.drawShip(true);
+    this.cameras.main.flash(300, 255, 50, 50);
+    this.cameras.main.shake(300, 0.02);
 
-  public updateTilt(angle: number): void {
-    this.tilt = Phaser.Math.Clamp(angle, -1, 1);
-  }
+    const overlay = this.add.graphics().setDepth(25);
+    overlay.fillStyle(0x000000, 0.75);
+    overlay.fillRect(0, 0, W, H);
 
-  public getScore(): number {
-    return this.score;
-  }
-}
+    this.add.text(W/2, H/2 - 70, '💥 GAME OVER', {
+      fontSize: '42px', color: '#ff4444',
+      fontFamily: 'monospace',
+      stroke: '#000', strokeThickness: 6
+    }).setOrigin(0.5).setDepth(30);
 
-// ── IronGame wrapper class ────────────────────────────────────────
-export class IronGame implements GameInstance {
-  private game: Phaser.Game | null = null;
-  private scene: IronScene | null = null;
-  private gameOverCb: ((score: number) => void) | null = null;
+    this.add.text(W/2, H/2, `Score: ${this.score}`, {
+      fontSize: '30px', color: '#ffffff',
+      fontFamily: 'monospace'
+    }).setOrigin(0.5).setDepth(30);
 
-  constructor(container: HTMLElement) {
-    if (typeof window === 'undefined') return;
+    this.add.text(W/2, H/2 + 55, '¡Buen esfuerzo!', {
+      fontSize: '20px', color: '#aaaaaa',
+      fontFamily: 'monospace'
+    }).setOrigin(0.5).setDepth(30);
 
-    const scene = new IronScene();
-    this.scene = scene;
-
-    this.game = new Phaser.Game({
-      type: Phaser.CANVAS,
-      width: GAME_WIDTH,
-      height: GAME_HEIGHT,
-      parent: container,
-      backgroundColor: '#0f0f23',
-      scene: scene,
-      scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
-      },
+    this.time.delayedCall(1500, () => {
+      if (this.gameOverCallback) this.gameOverCallback(this.score);
     });
-
-    scene.events.once('create', () => {
-      if (this.gameOverCb) {
-        scene.gameOverCallback = this.gameOverCb;
-      }
-    });
-  }
-
-  setTilt(angle: number): void {
-    this.scene?.updateTilt(angle);
-  }
-
-  onGameOver(callback: (score: number) => void): void {
-    this.gameOverCb = callback;
-    if (this.scene) {
-      this.scene.gameOverCallback = callback;
-    }
-  }
-
-  pause(): void {
-    if (this.scene) this.scene.isPaused = true;
-  }
-
-  resume(): void {
-    if (this.scene) this.scene.isPaused = false;
-  }
-
-  getScore(): number {
-    return this.scene?.getScore() ?? 0;
-  }
-
-  destroy(): void {
-    this.game?.destroy(true);
-    this.game = null;
-    this.scene = null;
   }
 }

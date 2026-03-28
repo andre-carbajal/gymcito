@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useCamera } from '@/src/hooks/useCamera';
 import { useInputMode } from '@/src/hooks/useInputMode';
 import { usePoseDetection } from '@/src/ai/usePoseDetection';
 import type { Game, GameInstance } from '@/src/lib/types';
@@ -19,10 +18,79 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
   const scoreIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { inputMode, setInputMode } = useInputMode();
-  const { videoRef, isReady: cameraReady, error: cameraError } = useCamera();
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  const [cameraPermission, setCameraPermission] = useState<'granted' | 'denied' | 'pending'>('pending');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('gymcito_camera_permission') as any;
+    if (saved) setCameraPermission(saved);
+  }, []);
+
   const { keypoints, getPoint } = usePoseDetection(
     inputMode === 'camera' ? videoRef : { current: null },
   );
+
+  async function requestCameraPermission() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach((t) => t.stop()); // solo pedir permiso, no usar aún
+      localStorage.setItem('gymcito_camera_permission', 'granted');
+      setCameraPermission('granted');
+    } catch {
+      localStorage.setItem('gymcito_camera_permission', 'denied');
+      setCameraPermission('denied');
+    }
+  }
+
+  // Camera stream lifecycle
+  useEffect(() => {
+    if (inputMode !== 'camera' || cameraPermission !== 'granted') {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) videoRef.current.srcObject = null;
+      setCameraReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            if (!cancelled) setCameraReady(true);
+          };
+        }
+      } catch (err) {
+        if (!cancelled) setCameraError('Error al acceder a la cámara.');
+      }
+    }
+    void startCamera();
+
+    return () => {
+      cancelled = true;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+    };
+  }, [inputMode, cameraPermission]);
 
   const [currentScore, setCurrentScore] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -34,59 +102,66 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
 
   // Initialize game
   useEffect(() => {
-    if (!containerRef.current || typeof window === 'undefined') return;
+    // Esperar al siguiente tick para garantizar que el DOM esté listo
+    const timeout = setTimeout(() => {
+      if (!containerRef.current || typeof window === 'undefined') return;
 
-    let game: GameInstance | null = null;
+      const containerId = `game-container-${gameId}`;
+      containerRef.current.id = containerId;
 
-    async function loadGame() {
-      if (!containerRef.current) return;
+      let game: GameInstance | null = null;
 
-      switch (gameId) {
-        case 'flappy': {
-          const { FlappyGame } = await import('@/src/games/flappy/FlappyGame');
-          game = new FlappyGame(containerRef.current);
-          break;
+      async function loadGame() {
+        if (!containerRef.current) return;
+
+        switch (gameId) {
+          case 'flappy': {
+            const { FlappyGame } = await import('@/src/games/flappy/FlappyGame');
+            game = new FlappyGame(containerRef.current);
+            break;
+          }
+          case 'dino': {
+            const { DinoGame } = await import('@/src/games/dino/DinoGame');
+            game = new DinoGame(containerRef.current);
+            break;
+          }
+          case 'ironboard': {
+            const { IronGame } = await import('@/src/games/ironboard/IronGame');
+            game = new IronGame(containerRef.current);
+            break;
+          }
         }
-        case 'dino': {
-          const { DinoGame } = await import('@/src/games/dino/DinoGame');
-          game = new DinoGame(containerRef.current);
-          break;
-        }
-        case 'ironboard': {
-          const { IronGame } = await import('@/src/games/ironboard/IronGame');
-          game = new IronGame(containerRef.current);
-          break;
+
+        if (game) {
+          gameRef.current = game;
+          game.onGameOver((finalScore) => {
+            onGameOver(finalScore);
+            if (scoreIntervalRef.current) {
+              clearInterval(scoreIntervalRef.current);
+            }
+          });
+          setGameStarted(true);
+
+          // Periodically sync score
+          scoreIntervalRef.current = setInterval(() => {
+            if (gameRef.current) {
+              const s = gameRef.current.getScore();
+              setCurrentScore(s);
+              onScore(s);
+            }
+          }, 100);
         }
       }
 
-      if (game) {
-        gameRef.current = game;
-        game.onGameOver((finalScore) => {
-          onGameOver(finalScore);
-          if (scoreIntervalRef.current) {
-            clearInterval(scoreIntervalRef.current);
-          }
-        });
-        setGameStarted(true);
-
-        // Periodically sync score
-        scoreIntervalRef.current = setInterval(() => {
-          if (gameRef.current) {
-            const s = gameRef.current.getScore();
-            setCurrentScore(s);
-            onScore(s);
-          }
-        }, 100);
-      }
-    }
-
-    void loadGame();
+      void loadGame();
+    }, 100);
 
     return () => {
+      clearTimeout(timeout);
       if (scoreIntervalRef.current) {
         clearInterval(scoreIntervalRef.current);
       }
-      game?.destroy();
+      gameRef.current?.destroy();
       gameRef.current = null;
     };
   }, [gameId, onGameOver, onScore]);
@@ -161,7 +236,7 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
         leftShoulder.score > 0.3 && rightShoulder.score > 0.3
       ) {
         // Calculate tilt from shoulder difference
-        const diff = leftShoulder.y - rightShoulder.y;
+        const diff = rightShoulder.y - leftShoulder.y;
         const tilt = Math.max(-1, Math.min(1, diff / 50));
         game.setTilt?.(tilt);
       }
@@ -191,14 +266,24 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
           game.triggerDuck?.();
         }
       }
+      if (gameId === 'ironboard') {
+        if (e.code === 'ArrowLeft') game.setTilt?.(-0.7);
+        if (e.code === 'ArrowRight') game.setTilt?.(0.7);
+      }
+    }
+
+    function handleKeyUp(e: KeyboardEvent) {
+      if (gameId === 'ironboard' && game) {
+        if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+          game.setTilt?.(0);
+        }
+      }
     }
 
     function handleMouseMove(e: MouseEvent) {
-      if (gameId === 'ironboard' && game && containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const tilt = (e.clientX - centerX) / (rect.width / 2);
-        game.setTilt?.(Math.max(-1, Math.min(1, tilt)));
+      if (gameId === 'ironboard' && game) {
+        const tilt = (e.clientX / window.innerWidth - 0.5) * 2;
+        game.setTilt?.(tilt);
       }
     }
 
@@ -209,11 +294,13 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
     }
 
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('mousemove', handleMouseMove);
     containerRef.current?.addEventListener('click', handleClick);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('mousemove', handleMouseMove);
     };
   }, [inputMode, gameId]);
@@ -277,26 +364,62 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
   }, [isPaused]);
 
   return (
-    <div className="relative w-full max-w-[800px] mx-auto">
-      {/* Hidden camera video */}
+    <div className={`relative w-full mx-auto ${gameId === 'ironboard' ? 'lg:w-[60vw]' : 'max-w-[800px]'}`}>
+      {/* Ask for Camera Permission */}
+      {inputMode === 'camera' && cameraPermission === 'pending' && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm rounded-2xl p-4">
+          <div className="bg-[#12122a] border border-[#2a2a4a] rounded-xl p-6 text-center max-w-sm animate-slide-up shadow-2xl">
+            <Camera className="w-12 h-12 text-purple-500 mx-auto mb-4 animate-pulse" />
+            <h3 className="text-lg font-bold text-white mb-2 font-heading">Permiso de cámara</h3>
+            <p className="text-gray-400 text-sm mb-6">Gymcito necesita acceso a tu cámara para el control por movimiento.</p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => {
+                  localStorage.setItem('gymcito_camera_permission', 'denied');
+                  setCameraPermission('denied');
+                }}
+                className="px-4 py-2 text-sm font-semibold text-gray-400 hover:text-white transition-colors cursor-pointer"
+              >
+                Ahora no
+              </button>
+              <button
+                onClick={requestCameraPermission}
+                className="px-5 py-2 bg-gradient-to-r from-purple-600 to-cyan-600 text-white font-bold rounded-lg hover:from-purple-500 hover:to-cyan-500 transition-all cursor-pointer shadow-lg shadow-purple-500/20"
+              >
+                Permitir cámara
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Cámara Stream Panel */}
       {inputMode === 'camera' && (
-        <div className="absolute top-2 right-2 z-20 w-32 h-24 rounded-lg overflow-hidden border-2 border-purple-500/40 shadow-lg">
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            className="w-full h-full object-cover scale-x-[-1]"
-          />
-          {!cameraReady && !cameraError && (
-            <div className="absolute inset-0 flex items-center justify-center bg-[#1a1a2e]/80">
-              <Camera className="w-5 h-5 text-purple-400 animate-pulse" />
+        <div className="absolute top-2 right-2 z-20 w-32 h-24 rounded-lg overflow-hidden border-2 border-purple-500/40 shadow-lg bg-[#1a1a2e]/90 flex flex-col items-center justify-center">
+          {cameraPermission !== 'granted' ? (
+            <div className="p-2 text-center">
+              <button onClick={requestCameraPermission} className="bg-purple-600 text-[10px] font-bold py-1.5 px-3 rounded-md hover:bg-purple-500 transition-colors shadow-md text-white cursor-pointer mt-1">Activar cámara</button>
             </div>
-          )}
-          {cameraError && (
-            <div className="absolute inset-0 flex items-center justify-center bg-red-900/50 p-1">
-              <span className="text-[8px] text-red-300 text-center">{cameraError}</span>
-            </div>
+          ) : (
+            <>
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{ transform: 'scaleX(-1)' }}
+              />
+              {!cameraReady && !cameraError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-[#1a1a2e]/80">
+                  <Camera className="w-5 h-5 text-purple-400 animate-pulse" />
+                </div>
+              )}
+              {cameraError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-red-900/50 p-1">
+                  <span className="text-[8px] text-red-300 text-center">{cameraError}</span>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -357,12 +480,12 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
       {/* Game container */}
       <div
         ref={containerRef}
-        className={`w-full rounded-2xl overflow-hidden border-2 border-[#2a2a4a] shadow-2xl shadow-purple-500/10 ${
-          !gameStarted ? 'min-h-[400px] flex items-center justify-center bg-[#0f0f23]' : ''
-        }`}
+        className="w-full h-full min-h-[400px] rounded-2xl overflow-hidden border-2 border-[#2a2a4a] shadow-2xl shadow-purple-500/10 bg-[#0f0f23] flex items-center justify-center relative"
       >
         {!gameStarted && (
-          <div className="text-gray-500 text-sm animate-pulse">Cargando juego...</div>
+          <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-sm animate-pulse z-10 bg-[#0f0f23]">
+            Cargando juego...
+          </div>
         )}
       </div>
     </div>
