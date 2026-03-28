@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { supabase } from '@/src/lib/supabase';
+import { useEffect, useState, useCallback } from 'react';
+import { supabase, getPendingRequests, subscribeFriendships } from '@/src/lib/supabase';
 import { AuthModal } from '@/src/components/ui/AuthModal';
 import { InputModeSelector } from '@/src/components/ui/InputModeSelector';
 import { Leaderboard } from '@/src/components/ui/Leaderboard';
+import { FriendsPanel } from '@/src/components/ui/FriendsPanel';
+import { FriendScoreComparison } from '@/src/components/ui/FriendScoreComparison';
 import { useInputMode } from '@/src/hooks/useInputMode';
 import { GAME_LIST } from '@/src/lib/types';
 import type { User } from '@supabase/supabase-js';
 import Link from 'next/link';
-import { LogOut, Gamepad2, Trophy } from 'lucide-react';
+import { LogOut, Gamepad2, Trophy, Users } from 'lucide-react';
 
 export default function HomePage() {
   const [user, setUser] = useState<User | null>(null);
@@ -17,6 +19,12 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showFriends, setShowFriends] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [compareTarget, setCompareTarget] = useState<{
+    friendId: string;
+    friendName: string;
+  } | null>(null);
   const { inputMode, setInputMode } = useInputMode();
 
   // Check initial session
@@ -54,9 +62,38 @@ export default function HomePage() {
       });
   }, [user]);
 
+  // Fetch pending friend request count
+  const refreshPendingCount = useCallback(async () => {
+    if (!user) return;
+    const pending = await getPendingRequests();
+    setPendingCount(pending.length);
+  }, [user]);
+
+  useEffect(() => {
+    void refreshPendingCount();
+  }, [refreshPendingCount]);
+
+  // Realtime subscription for friendship changes (pending count badge)
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = subscribeFriendships(() => {
+      void refreshPendingCount();
+    });
+
+    return () => {
+      void channel.unsubscribe();
+    };
+  }, [user, refreshPendingCount]);
+
   async function handleLogout() {
     await supabase.auth.signOut();
     setUser(null);
+  }
+
+  function handleCompare(friendId: string, friendName: string) {
+    setCompareTarget({ friendId, friendName });
+    setShowFriends(false);
   }
 
   if (loading) {
@@ -140,6 +177,20 @@ export default function HomePage() {
           </h1>
 
           <div className="flex items-center gap-4">
+            <button
+              id="friends-toggle-btn"
+              onClick={() => setShowFriends(!showFriends)}
+              className="relative flex items-center gap-1.5 text-sm text-gray-400 hover:text-purple-400 transition-colors cursor-pointer"
+            >
+              <Users className="w-4 h-4" />
+              <span className="hidden sm:inline">Amigos</span>
+              {pendingCount > 0 && (
+                <span className="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] text-[9px] bg-red-500 text-white rounded-full flex items-center justify-center font-bold badge-pulse">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+
             <button
               id="leaderboard-toggle-btn"
               onClick={() => setShowLeaderboard(!showLeaderboard)}
@@ -226,6 +277,25 @@ export default function HomePage() {
       <footer className="border-t border-[#1a1a2e] py-4 text-center text-xs text-gray-600">
         Gymcito © {new Date().getFullYear()} — Controlado por tu cuerpo 💪
       </footer>
+
+      {/* Friends Panel (slide-in from right) */}
+      {showFriends && (
+        <FriendsPanel
+          onClose={() => setShowFriends(false)}
+          onCompare={handleCompare}
+          pendingCount={pendingCount}
+          onPendingCountChange={setPendingCount}
+        />
+      )}
+
+      {/* Score Comparison Modal */}
+      {compareTarget && (
+        <FriendScoreComparison
+          friendId={compareTarget.friendId}
+          friendName={compareTarget.friendName}
+          onClose={() => setCompareTarget(null)}
+        />
+      )}
     </div>
   );
 }

@@ -40,6 +40,33 @@ export interface LeaderboardEntry {
   } | null;
 }
 
+// ── Friendship types ──────────────────────────────────────────────
+export type FriendshipStatus = 'pending' | 'accepted' | 'rejected';
+
+export interface Friendship {
+  id: string;
+  user_id: string;
+  friend_id: string;
+  status: FriendshipStatus;
+  created_at: string;
+  // Joined profile of the OTHER user (not the current user)
+  friend_profile: {
+    id: string;
+    username: string;
+  } | null;
+}
+
+export interface FriendScoreComparison {
+  game: Game;
+  my_best_score: number;
+  friend_best_score: number;
+}
+
+export interface UserSearchResult {
+  id: string;
+  username: string;
+}
+
 // ── Game class interface (shared contract for all 3 games) ────────
 export interface GameInstance {
   triggerFlap?: () => void;
