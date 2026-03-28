@@ -106,6 +106,9 @@ class IronScene extends Phaser.Scene {
   private readonly EDGE_THRESHOLD = 80;
   private readonly EDGE_PUNISH_MS = 3000;
 
+  private gameStarted: boolean = false;
+  private countdownText!: Phaser.GameObjects.Text;
+
   constructor() {
     super({ key: 'IronScene' });
   }
@@ -239,7 +242,7 @@ class IronScene extends Phaser.Scene {
     this.time.addEvent({
       delay: 50,
       callback: () => {
-        if (this.isGameOver) return;
+        if (this.isGameOver || !this.gameStarted) return;
         // Calcular delay actual según dificultad
         const currentDelay = Math.max(400, 1200 - Math.floor(this.gameTime / 10000) * 100);
         // Usar un acumulador manual
@@ -256,7 +259,7 @@ class IronScene extends Phaser.Scene {
     this.time.addEvent({
       delay: 100,
       callback: () => {
-        if (!this.isGameOver) {
+        if (!this.isGameOver && this.gameStarted) {
           this.score += 1;
           this.scoreText.setText(`Score: ${this.score}`);
         }
@@ -277,9 +280,36 @@ class IronScene extends Phaser.Scene {
     const cb = (this.game as any).gymcitoGameOverCallback;
     if (cb) this.gameOverCallback = cb;
 
-    // Primer asteroide después de 500ms para dar tiempo a cargar
-    this.time.delayedCall(500, () => {
-      this.spawnAsteroid();
+    // Iniciar cuenta regresiva
+    this.startCountdown();
+  }
+
+  private startCountdown() {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    
+    this.countdownText = this.add.text(W/2, H/2, '3', {
+      fontSize: '120px', color: '#ffcc00', fontStyle: 'bold', fontFamily: 'monospace'
+    }).setOrigin(0.5).setDepth(50);
+
+    let count = 3;
+    const timer = this.time.addEvent({
+      delay: 1000,
+      callback: () => {
+        count--;
+        if (count > 0) {
+          this.countdownText.setText(count.toString());
+        } else if (count === 0) {
+          this.countdownText.setText('¡YA!');
+          this.countdownText.setColor('#00ff88');
+          this.gameStarted = true;
+          this.gameTime = 0;
+        } else {
+          this.countdownText.destroy();
+          timer.remove();
+        }
+      },
+      loop: true
     });
   }
 
@@ -344,17 +374,19 @@ class IronScene extends Phaser.Scene {
 
     this.gameTime += delta;
 
-    // Aumentar velocidad cada 15 segundos
-    const speedTier = Math.floor(this.gameTime / 15000);
-    const timeBonus = speedTier * 20;
-
-    // También aumentar por score
-    const scoreBonus = Math.floor(this.score / 60) * 15;
-
-    this.asteroidSpeed = Math.min(500, 180 + timeBonus + scoreBonus);
-
     const H = this.scale.height;
     const W = this.scale.width;
+
+    // Forzar posición Y de la nave para evitar que "caiga" o se mueva abajo
+    this.ship.y = H - 100;
+
+    // Aumentar velocidad cada 15 segundos (solo si ya empezó)
+    if (this.gameStarted) {
+      const speedTier = Math.floor(this.gameTime / 15000);
+      const timeBonus = speedTier * 20;
+      const scoreBonus = Math.floor(this.score / 60) * 15;
+      this.asteroidSpeed = Math.min(500, 180 + timeBonus + scoreBonus);
+    }
 
     // Mover nave con suavizado
     const targetVX = this.currentTilt * 400;
