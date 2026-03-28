@@ -219,7 +219,7 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
       const leftShoulder = getPoint('left_shoulder');
       const rightShoulder = getPoint('right_shoulder');
       if (leftShoulder && rightShoulder && leftShoulder.score > 0.3 && rightShoulder.score > 0.3) {
-        const diff = leftShoulder.y - rightShoulder.y;
+        const diff = rightShoulder.y - leftShoulder.y;
         const tilt = Math.max(-1, Math.min(1, diff / 50));
         game.setTilt?.(tilt);
       }
