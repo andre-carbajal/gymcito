@@ -1,0 +1,50 @@
+﻿Ôû▓ Next.js 16.2.1 (Turbopack)
+
+  Creating an optimized production build ...
+Ô£ô Compiled successfully in 11.4s
+  Running TypeScript ...
+  Finished TypeScript in 5.1s ...
+  Collecting page data using 6 workers ...
+  Generating static pages using 6 workers (0/4) ...
+node.exe : Error occurred prerendering page "/". Read 
+more: https://nextjs.org/docs/messages/prerender-error
+En línea: 1 Carácter: 1
++ & "C:\Program Files\nodejs/node.exe" 
+"C:\Users\jefer\AppData\Roaming\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Error occur 
+   red ...prerender-error:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Error: supabaseUrl is required.
+    at <unknown> (C:\Users\jefer\Music\gymcito\.next\serv
+er\chunks\ssr\_12buv.b._.js:37:43441)
+    at new cv (C:\Users\jefer\Music\gymcito\.next\server\
+chunks\ssr\_12buv.b._.js:37:43692)
+    at module evaluation (C:\Users\jefer\Music\gymcito\.n
+ext\server\chunks\ssr\_12buv.b._.js:37:48030)
+    at instantiateModule (C:\Users\jefer\Music\gymcito\.n
+ext\server\chunks\ssr\[turbopack]_runtime.js:853:9)
+    at getOrInstantiateModuleFromParent (C:\Users\jefer\M
+usic\gymcito\.next\server\chunks\ssr\[turbopack]_runtime.
+js:877:12)
+    at Context.esmImport [as i] (C:\Users\jefer\Music\gym
+cito\.next\server\chunks\ssr\[turbopack]_runtime.js:281:2
+0)
+    at module evaluation (C:\Users\jefer\Music\gymcito\.n
+ext\server\chunks\ssr\app_page_tsx_0es_sk2._.js:1:74)
+    at instantiateModule (C:\Users\jefer\Music\gymcito\.n
+ext\server\chunks\ssr\[turbopack]_runtime.js:853:9)
+    at getOrInstantiateModuleFromParent (C:\Users\jefer\M
+usic\gymcito\.next\server\chunks\ssr\[turbopack]_runtime.
+js:877:12)
+    at Context.commonJsRequire [as r] (C:\Users\jefer\Mus
+ic\gymcito\.next\server\chunks\ssr\[turbopack]_runtime.js
+:302:12) {
+  digest: '3038592561'
+}
+Export encountered an error on /page: /, exiting the 
+build.
+Ô¿» Next.js build worker exited with code: 1 and signal: 
+null

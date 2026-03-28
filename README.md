@@ -1,36 +1,125 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎮 Gymcito
 
-## Getting Started
+Plataforma web con **3 minijuegos controlados por cámara** usando detección de postura corporal (MoveNet). También soporta control por touch y mouse.
 
-First, run the development server:
+## 🕹️ Juegos
+
+| Juego | Descripción | Control Cámara |
+|-------|-------------|----------------|
+| 🐦 **Flappy Bird** | Salta entre tubos sin tocar nada | Levanta las manos |
+| 🦖 **Dino Runner** | Salta y agáchate para esquivar obstáculos | Brazos arriba / Agáchate |
+| 🏄 **Iron Board** | Inclínate para esquivar obstáculos en la tabla | Inclina los hombros |
+
+## 🛠️ Stack Tecnológico
+
+- **Next.js 16** (App Router) + TypeScript + Tailwind CSS v4
+- **Supabase** (Auth + Postgres + Realtime)
+- **TensorFlow.js** + MoveNet (SINGLEPOSE_LIGHTNING)
+- **Phaser 3** para los juegos
+- **lucide-react** para iconos
+
+## 🚀 Setup
+
+### 1. Clonar el repositorio
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/tu-usuario/gymcito.git
+cd gymcito
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Configurar variables de entorno
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cp .env.example .env.local
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Edita `.env.local` con tus credenciales de Supabase:
 
-## Learn More
+```
+NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 3. Configurar Supabase
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Crea un proyecto en [supabase.com](https://supabase.com)
+2. Ve al **SQL Editor** y ejecuta el contenido de `supabase/migrations/001_initial_schema.sql`
+3. En **Authentication > Settings**, habilita el proveedor de Email
+4. En **Database > Replication**, asegúrate de que la tabla `scores` tenga Realtime habilitado
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 4. Instalar dependencias
 
-## Deploy on Vercel
+```bash
+pnpm install
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 5. Ejecutar en desarrollo
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm dev
+```
+
+Visita [http://localhost:3000](http://localhost:3000)
+
+## 👥 Asignación de Desarrollo
+
+| Dev | Área | Archivos |
+|-----|------|----------|
+| **Dev 1** | AI + Lib + App | `src/ai/*`, `src/lib/*`, `src/hooks/*`, `app/*` |
+| **Dev 2** | Flappy Bird | `src/games/flappy/*`, ajustes en `GameWrapper` |
+| **Dev 3** | Dino Runner | `src/games/dino/*`, ajustes en `GameWrapper` |
+| **Dev 4** | Iron Board + UI | `src/games/ironboard/*`, `src/components/ui/*` |
+
+## 📁 Estructura del Proyecto
+
+```
+gymcito/
+├── app/                          # Rutas Next.js (App Router)
+│   ├── layout.tsx                # Layout raíz
+│   ├── page.tsx                  # Página principal (menú)
+│   ├── globals.css               # Estilos globales
+│   └── game/
+│       └── [slug]/
+│           └── page.tsx          # Página de juego dinámica
+├── src/
+│   ├── ai/
+│   │   └── usePoseDetection.ts   # Hook de detección de pose (MoveNet)
+│   ├── hooks/
+│   │   ├── useCamera.ts          # Hook de cámara
+│   │   └── useInputMode.ts       # Hook de modo de input
+│   ├── lib/
+│   │   ├── supabase.ts           # Cliente Supabase + helpers
+│   │   └── types.ts              # Tipos TypeScript
+│   ├── components/
+│   │   ├── game/
+│   │   │   └── GameWrapper.tsx   # Wrapper de juegos con input bridging
+│   │   └── ui/
+│   │       ├── AuthModal.tsx     # Modal de login/registro
+│   │       ├── InputModeSelector.tsx # Selector de modo de input
+│   │       └── Leaderboard.tsx   # Leaderboard en tiempo real
+│   └── games/
+│       ├── flappy/
+│       │   └── FlappyGame.ts     # Motor Flappy Bird (Phaser 3)
+│       ├── dino/
+│       │   └── DinoGame.ts       # Motor Dino Runner (Phaser 3)
+│       └── ironboard/
+│           └── IronGame.ts       # Motor Iron Board (Phaser 3)
+├── supabase/
+│   └── migrations/
+│       └── 001_initial_schema.sql # Schema de base de datos
+├── .env.example
+├── package.json
+└── README.md
+```
+
+## 🎯 Modos de Input
+
+| Modo | Descripción |
+|------|-------------|
+| 📷 **Cámara** | Detección de postura con MoveNet |
+| 👆 **Touch** | Gestos táctiles en móvil |
+| 🖱️ **Mouse** | Click y teclado en escritorio |
+
+## 📄 Licencia
+
+MIT
