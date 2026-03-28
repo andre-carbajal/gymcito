@@ -1,282 +1,367 @@
 import * as Phaser from 'phaser';
-import type { GameInstance } from '@/src/lib/types';
+import {
+  COLORS,
+  drawMarioPipe,
+  spawnClouds,
+  drawGround,
+  drawBirdGraphics,
+  PIPE_BODY_WIDTH,
+  type CloudData,
+} from './FlappyVisuals';
 
-// ── Constants ─────────────────────────────────────────────────────
-const GAME_WIDTH = 400;
-const GAME_HEIGHT = 600;
-const BIRD_SIZE = 24;
-const PIPE_WIDTH = 52;
-const PIPE_GAP = 150;
-const GRAVITY = 900;
-const FLAP_VELOCITY = -320;
-const BASE_PIPE_SPEED = 180;
-const SPEED_INCREMENT = 0.3; // per second
+const GROUND_HEIGHT = 40;
 
-// ── Flappy Scene ──────────────────────────────────────────────────
-class FlappyScene extends Phaser.Scene {
-  private bird!: Phaser.GameObjects.Rectangle;
-  private pipes: Phaser.GameObjects.Rectangle[] = [];
-  private ground!: Phaser.GameObjects.Rectangle;
+class MainScene extends Phaser.Scene {
+  // El pájaro ahora es un Container con gráficos bonitos + un hitbox invisible
+  private birdContainer!: Phaser.GameObjects.Container;
+  private birdHitbox!: Phaser.GameObjects.Arc & { body: Phaser.Physics.Arcade.Body };
+
+  private pipes!: Phaser.Physics.Arcade.Group;
+  private ground!: Phaser.GameObjects.Rectangle & { body: Phaser.Physics.Arcade.StaticBody };
   private scoreText!: Phaser.GameObjects.Text;
+  private countdownText!: Phaser.GameObjects.Text;
 
-  private birdVelocity = 0;
-  private score = 0;
-  private pipeSpeed = BASE_PIPE_SPEED;
-  private pipeTimer = 0;
-  private pipeInterval = 1800;
-  private isGameOver = false;
-  private elapsed = 0;
+  private clouds: CloudData[] = [];
 
-  public gameOverCallback: ((score: number) => void) | null = null;
-  public isPaused = false;
+  private currentScore: number = 0;
+  private pipeVelocity: number = -200;
+  private pipeEvent?: Phaser.Time.TimerEvent;
+  private gameState: 'CALIBRATION' | 'PLAYING' | 'GAMEOVER' = 'CALIBRATION';
+  private parentGame!: FlappyGame;
 
   constructor() {
-    super({ key: 'FlappyScene' });
+    super({ key: 'MainScene' });
   }
 
-  create(): void {
-    // Sky gradient background
-    this.cameras.main.setBackgroundColor('#1a1a2e');
+  init(data: { parentGame: FlappyGame }) {
+    this.parentGame = data.parentGame;
+    this.currentScore = 0;
+    this.pipeVelocity = -200;
+    this.gameState = 'CALIBRATION';
+  }
 
-    // Ground
+  create() {
+    const gameWidth = this.sys.game.config.width as number;
+    const gameHeight = this.sys.game.config.height as number;
+
+    // ── Fondo celeste ──
+    const bg = this.add.graphics();
+    bg.fillStyle(COLORS.sky, 1);
+    bg.fillRect(0, 0, gameWidth, gameHeight);
+
+    // ── Nubes flotantes ──
+    this.clouds = spawnClouds(this, gameWidth);
+
+    // ── Suelo con pasto ──
+    drawGround(this, gameWidth, gameHeight, GROUND_HEIGHT);
+
+    // Hitbox invisible del suelo para colisiones
     this.ground = this.add.rectangle(
-      GAME_WIDTH / 2,
-      GAME_HEIGHT - 15,
-      GAME_WIDTH,
-      30,
-      0x16213e,
-    );
+      gameWidth / 2, gameHeight - GROUND_HEIGHT / 2,
+      gameWidth, GROUND_HEIGHT, 0x000000, 0
+    ) as any;
+    this.physics.add.existing(this.ground, true);
 
-    // Bird
-    this.bird = this.add.rectangle(
-      100,
-      GAME_HEIGHT / 2,
-      BIRD_SIZE,
-      BIRD_SIZE,
-      0xfbbf24,
-    );
+    // ── Pájaro con diseño ──
+    this.birdContainer = drawBirdGraphics(this, gameWidth * 0.2, gameHeight / 2);
+    this.birdContainer.setDepth(8);
 
-    // Score text
-    this.scoreText = this.add.text(GAME_WIDTH / 2, 40, '0', {
-      fontFamily: '"Press Start 2P", monospace',
-      fontSize: '24px',
-      color: '#ffffff',
+    // Hitbox circular invisible para colisiones precisas
+    this.birdHitbox = this.add.circle(gameWidth * 0.2, gameHeight / 2, 16, 0xff0000, 0) as any;
+    this.physics.add.existing(this.birdHitbox);
+    this.birdHitbox.body.setGravityY(0);
+    this.birdHitbox.body.setCollideWorldBounds(true);
+    this.birdHitbox.body.setCircle(16);
+
+    // ── Grupo de tuberías ──
+    this.pipes = this.physics.add.group();
+
+    // ── Colisiones ──
+    this.physics.add.collider(this.birdHitbox, this.ground, this.handleGameOver, undefined, this);
+    this.physics.add.collider(this.birdHitbox, this.pipes, this.handleGameOver, undefined, this);
+
+    // ── Textos ──
+    this.scoreText = this.add.text(20, 20, 'Score: 0', {
+      fontSize: '32px',
+      color: COLORS.textWhite,
+      fontStyle: 'bold',
+      stroke: COLORS.strokeBlack,
+      strokeThickness: 4,
     });
-    this.scoreText.setOrigin(0.5);
+    this.scoreText.setDepth(10);
+    this.scoreText.setVisible(false);
 
-    this.birdVelocity = 0;
-    this.score = 0;
-    this.pipeSpeed = BASE_PIPE_SPEED;
-    this.pipeTimer = 0;
-    this.elapsed = 0;
-    this.isGameOver = false;
-    this.isPaused = false;
-    this.pipes = [];
+    this.countdownText = this.add.text(gameWidth / 2, gameHeight / 2, '3', {
+      fontSize: '80px',
+      color: COLORS.textWhite,
+      fontStyle: 'bold',
+      stroke: COLORS.strokeBlack,
+      strokeThickness: 6,
+    });
+    this.countdownText.setOrigin(0.5);
+    this.countdownText.setDepth(10);
 
-    const cb = (this.game as any).gymcitoGameOverCallback;
-    if (cb) this.gameOverCallback = cb;
+    this.startCalibration();
   }
 
-  update(_time: number, delta: number): void {
-    if (this.isGameOver || this.isPaused) return;
+  private startCalibration() {
+    let count = 3;
+    this.time.addEvent({
+      delay: 1000,
+      repeat: 3,
+      callback: () => {
+        count--;
+        if (count > 0) {
+          this.countdownText.setText(count.toString());
+        } else if (count === 0) {
+          this.countdownText.setText('¡Listo!');
+        } else {
+          this.countdownText.setVisible(false);
+          this.startGame();
+        }
+      },
+    });
+  }
 
-    const dt = delta / 1000;
-    this.elapsed += dt;
+  private startGame() {
+    this.gameState = 'PLAYING';
+    this.birdHitbox.body.setGravityY(600);
 
-    // Gravity
-    this.birdVelocity += GRAVITY * dt;
-    this.bird.y += this.birdVelocity * dt;
+    this.flap();
+    this.scoreText.setVisible(true);
+    this.spawnPipes();
 
-    // Progressive speed
-    this.pipeSpeed = BASE_PIPE_SPEED + this.elapsed * SPEED_INCREMENT * 60;
+    this.pipeEvent = this.time.addEvent({
+      delay: 1800,
+      loop: true,
+      callback: this.spawnPipes,
+      callbackScope: this,
+    });
+  }
 
-    // Pipe spawn timer
-    this.pipeTimer += delta;
-    if (this.pipeTimer >= this.pipeInterval) {
-      this.pipeTimer = 0;
-      this.spawnPipe();
+  private spawnPipes() {
+    if (this.gameState !== 'PLAYING') return;
+
+    const gameWidth = this.sys.game.config.width as number;
+    const gameHeight = this.sys.game.config.height as number;
+
+    const gap = Math.max(150, 280 - Math.floor(this.currentScore / 3) * 10);
+    const minHeight = 60;
+    const maxHeight = gameHeight - GROUND_HEIGHT - gap - minHeight;
+    const topPipeHeight = Phaser.Math.Between(minHeight, maxHeight);
+
+    // ── Tubo superior (estilo Mario) ──
+    const topContainer = drawMarioPipe(this, gameWidth + 60, topPipeHeight, 'top', gameHeight, GROUND_HEIGHT);
+    topContainer.setDepth(4);
+
+    // Hitbox rectangular invisible para colisiones
+    const topHitbox = this.add.rectangle(gameWidth + 60, topPipeHeight / 2, PIPE_BODY_WIDTH, topPipeHeight, 0xff0000, 0) as any;
+    this.physics.add.existing(topHitbox);
+    this.pipes.add(topHitbox);
+    topHitbox.body.setVelocityX(this.pipeVelocity);
+    topHitbox.body.setAllowGravity(false);
+    topHitbox.body.setImmovable(true);
+    topHitbox.setData('passed', false);
+    topHitbox.setData('visual', topContainer);
+
+    // ── Tubo inferior (estilo Mario) ──
+    const bottomPipeHeight = gameHeight - GROUND_HEIGHT - topPipeHeight - gap;
+    const bottomContainer = drawMarioPipe(this, gameWidth + 60, bottomPipeHeight, 'bottom', gameHeight, GROUND_HEIGHT);
+    bottomContainer.setDepth(4);
+
+    const bottomY = topPipeHeight + gap + bottomPipeHeight / 2;
+    const bottomHitbox = this.add.rectangle(gameWidth + 60, bottomY, PIPE_BODY_WIDTH, bottomPipeHeight, 0xff0000, 0) as any;
+    this.physics.add.existing(bottomHitbox);
+    this.pipes.add(bottomHitbox);
+    bottomHitbox.body.setVelocityX(this.pipeVelocity);
+    bottomHitbox.body.setAllowGravity(false);
+    bottomHitbox.body.setImmovable(true);
+    bottomHitbox.setData('visual', bottomContainer);
+  }
+
+  update() {
+    if (this.gameState === 'GAMEOVER') return;
+
+    // Sincronizar posición visual del pájaro con su hitbox
+    this.birdContainer.setPosition(this.birdHitbox.x, this.birdHitbox.y);
+
+    // Ligera rotación del pájaro según velocidad vertical
+    if (this.gameState === 'PLAYING') {
+      const vy = this.birdHitbox.body.velocity.y;
+      this.birdContainer.setAngle(Phaser.Math.Clamp(vy * 0.1, -30, 60));
     }
 
-    // Move pipes
-    const pipesToRemove: number[] = [];
-    for (let i = 0; i < this.pipes.length; i += 2) {
-      const topPipe = this.pipes[i];
-      const bottomPipe = this.pipes[i + 1];
+    // Mover nubes lentamente
+    for (const cloud of this.clouds) {
+      cloud.graphics.x -= cloud.speed;
+      if (cloud.graphics.x < -120) {
+        cloud.graphics.x = (this.sys.game.config.width as number) + 120;
+      }
+    }
 
-      if (!topPipe || !bottomPipe) continue;
+    if (this.gameState !== 'PLAYING') return;
 
-      const moveAmount = this.pipeSpeed * dt;
-      topPipe.x -= moveAmount;
-      bottomPipe.x -= moveAmount;
+    this.pipes.getChildren().forEach((child) => {
+      const pipe = child as Phaser.GameObjects.Rectangle & { body: Phaser.Physics.Arcade.Body };
+      const visual = pipe.getData('visual') as Phaser.GameObjects.Container | undefined;
 
-      // Score: when bird passes the pipe center
-      if (
-        topPipe.x + PIPE_WIDTH / 2 < this.bird.x &&
-        topPipe.x + PIPE_WIDTH / 2 >= this.bird.x - moveAmount
-      ) {
-        this.score++;
-        this.scoreText.setText(String(this.score));
+      // Sincronizar el contenedor visual con el hitbox
+      if (visual) {
+        visual.x = pipe.x;
       }
 
-      // Remove off-screen pipes
-      if (topPipe.x < -PIPE_WIDTH) {
-        pipesToRemove.push(i);
+      // Puntuación (solo tubos superiores marcados con 'passed')
+      if (pipe.getData('passed') === false) {
+        if (pipe.x + pipe.width / 2 < this.birdHitbox.x - 16) {
+          pipe.setData('passed', true);
+          this.currentScore++;
+          this.parentGame.score = this.currentScore;
+          this.scoreText.setText(`Score: ${this.currentScore}`);
+
+          if (this.currentScore > 0 && this.currentScore % 5 === 0) {
+            this.pipeVelocity -= 10;
+            this.pipes.getChildren().forEach((p: any) => p.body.setVelocityX(this.pipeVelocity));
+          }
+        }
       }
-    }
 
-    // Clean up off-screen pipes (iterate in reverse)
-    for (let i = pipesToRemove.length - 1; i >= 0; i--) {
-      const idx = pipesToRemove[i];
-      const top = this.pipes[idx];
-      const bottom = this.pipes[idx + 1];
-      top.destroy();
-      bottom.destroy();
-      this.pipes.splice(idx, 2);
-    }
-
-    // Collision: ground / ceiling
-    if (this.bird.y + BIRD_SIZE / 2 >= GAME_HEIGHT - 30 || this.bird.y - BIRD_SIZE / 2 <= 0) {
-      this.endGame();
-      return;
-    }
-
-    // Collision: pipes
-    for (let i = 0; i < this.pipes.length; i++) {
-      const pipe = this.pipes[i];
-      if (this.rectsOverlap(this.bird, pipe)) {
-        this.endGame();
-        return;
+      // Limpiar tubos fuera de pantalla
+      if (pipe.x < -120) {
+        if (visual) visual.destroy();
+        pipe.destroy();
       }
+    });
+  }
+
+  flap() {
+    if (this.gameState === 'PLAYING') {
+      this.birdHitbox.body.setVelocityY(-350);
     }
   }
 
-  private spawnPipe(): void {
-    const gapY = Phaser.Math.Between(120, GAME_HEIGHT - 120 - PIPE_GAP);
-    const topHeight = gapY;
-    const bottomY = gapY + PIPE_GAP;
-    const bottomHeight = GAME_HEIGHT - 30 - bottomY;
+  private handleGameOver() {
+    if (this.gameState === 'GAMEOVER') return;
+    this.gameState = 'GAMEOVER';
 
-    const topPipe = this.add.rectangle(
-      GAME_WIDTH + PIPE_WIDTH / 2,
-      topHeight / 2,
-      PIPE_WIDTH,
-      topHeight,
-      0x0f3460,
-    );
+    this.birdHitbox.body.setVelocity(0, 0);
+    this.birdHitbox.body.setAllowGravity(false);
 
-    const bottomPipe = this.add.rectangle(
-      GAME_WIDTH + PIPE_WIDTH / 2,
-      bottomY + bottomHeight / 2,
-      PIPE_WIDTH,
-      bottomHeight,
-      0x0f3460,
-    );
+    this.pipes.getChildren().forEach((p: any) => p.body.setVelocityX(0));
 
-    this.pipes.push(topPipe, bottomPipe);
-  }
-
-  private rectsOverlap(
-    a: Phaser.GameObjects.Rectangle,
-    b: Phaser.GameObjects.Rectangle,
-  ): boolean {
-    const ax = a.x - a.width / 2;
-    const ay = a.y - a.height / 2;
-    const bx = b.x - b.width / 2;
-    const by = b.y - b.height / 2;
-
-    return (
-      ax < bx + b.width &&
-      ax + a.width > bx &&
-      ay < by + b.height &&
-      ay + a.height > by
-    );
-  }
-
-  private endGame(): void {
-    if (this.isGameOver) return;
-    this.isGameOver = true;
-
-    // Flash effect
-    this.cameras.main.flash(200, 255, 0, 0);
-
-    if (this.gameOverCallback) {
-      this.gameOverCallback(this.score);
+    if (this.pipeEvent) {
+      this.pipeEvent.remove();
     }
-  }
 
-  public flap(): void {
-    if (this.isGameOver || this.isPaused) return;
-    this.birdVelocity = FLAP_VELOCITY;
-  }
+    const gameWidth = this.sys.game.config.width as number;
+    const gameHeight = this.sys.game.config.height as number;
 
-  public getScore(): number {
-    return this.score;
+    this.add.text(gameWidth / 2, gameHeight / 2 - 40, 'GAME OVER', {
+      fontSize: '64px',
+      color: COLORS.textRed,
+      fontStyle: 'bold',
+      stroke: COLORS.strokeBlack,
+      strokeThickness: 6,
+    }).setOrigin(0.5).setDepth(10);
+
+    this.add.text(gameWidth / 2, gameHeight / 2 + 30, `Score: ${this.currentScore}`, {
+      fontSize: '40px',
+      color: COLORS.textWhite,
+      fontStyle: 'bold',
+      stroke: COLORS.strokeBlack,
+      strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(10);
+
+    this.parentGame.triggerGameOver(this.currentScore);
   }
 }
 
-// ── FlappyGame wrapper class ──────────────────────────────────────
-export class FlappyGame implements GameInstance {
-  private phaserGame: Phaser.Game | null = null;
-  private scene: FlappyScene | null = null;
-  private gameOverCb: ((score: number) => void) | null = null;
+export class FlappyGame {
+  private game: Phaser.Game | null = null;
+  private gameOverCallback: ((score: number) => void) | null = null;
+  public score: number = 0;
+  
+  // Registro global para matar instancias zombies si React re-renderiza antes de terminar de cargar
+  private static activeInstance: FlappyGame | null = null;
 
-  constructor(container: HTMLElement) {
-    if (typeof window === 'undefined') return;
+  constructor(containerElement: string | HTMLElement) {
+    // 1. Destruimos cualquier instancia previa agresivamente
+    if (FlappyGame.activeInstance) {
+      FlappyGame.activeInstance.destroy();
+    }
+    FlappyGame.activeInstance = this;
 
-    const scene = new FlappyScene();
-    this.scene = scene;
+    // 2. Extraemos el contenedor HTML (React pasa un HTMLElement, no un string)
+    const container = typeof containerElement === 'string' 
+      ? document.getElementById(containerElement) 
+      : containerElement;
 
-    this.phaserGame = new Phaser.Game({
-      type: Phaser.CANVAS,
-      width: GAME_WIDTH,
-      height: GAME_HEIGHT,
-      parent: container,
-      backgroundColor: '#1a1a2e',
-      scene: scene,
-      physics: { default: 'arcade' },
+    // 3. Limpieza profunda del DOM
+    if (container) {
+      const canvases = container.getElementsByTagName('canvas');
+      while (canvases.length > 0) {
+        canvases[0].parentNode?.removeChild(canvases[0]);
+      }
+    }
+
+    const config: Phaser.Types.Core.GameConfig = {
+      type: Phaser.CANVAS, // Solo canvas, como fue requerido
+      parent: containerElement,
+      width: 800,
+      height: 600,
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
       },
-      callbacks: {
-        postBoot: (game: Phaser.Game) => {
-          if (this.gameOverCb) {
-            (game as any).gymcitoGameOverCallback = this.gameOverCb;
-          }
-        },
+      physics: {
+        default: 'arcade',
+        arcade: {
+          gravity: { x: 0, y: 0 }, // La gravedad se aplica a nivel body cuando comience el juego
+          debug: false
+        }
       },
-    });
-  }
+      // Excluimos la carga de la escena en la config para que Phaser arranque en blanco
+    };
 
-  triggerFlap(): void {
-    this.scene?.flap();
-  }
+    this.game = new Phaser.Game(config);
 
-  onGameOver(callback: (score: number) => void): void {
-    this.gameOverCb = callback;
-    if (this.phaserGame) {
-      const scene = this.phaserGame.scene.getScene('FlappyScene') as any;
-      if (scene) scene.gameOverCallback = callback;
-      (this.phaserGame as any).gymcitoGameOverCallback = callback;
-    }
-  }
-
-  pause(): void {
-    if (this.scene) this.scene.isPaused = true;
-  }
-
-  resume(): void {
-    if (this.scene) this.scene.isPaused = false;
+    // Inyectamos la clase (no instancia) y pasamos 'this' a través del método init() de forma asíncrona segura
+    this.game.scene.add('MainScene', MainScene, true, { parentGame: this });
   }
 
   getScore(): number {
-    return this.scene?.getScore() ?? 0;
+    return this.score;
   }
 
-  destroy(): void {
-    this.phaserGame?.destroy(true);
-    this.phaserGame = null;
-    this.gameOverCb = null;
-    this.scene = null;
+  triggerFlap() {
+    if (!this.game) return;
+    const scene = this.game.scene.getScene('MainScene') as MainScene;
+    if (scene) {
+      scene.flap();
+    }
+  }
+
+  onGameOver(callback: (score: number) => void) {
+    this.gameOverCallback = callback;
+  }
+
+  triggerGameOver(finalScore: number) {
+    if (this.gameOverCallback) {
+      this.gameOverCallback(finalScore);
+    }
+  }
+
+  pause() {
+    this.game?.scene.getScene('MainScene')?.scene.pause();
+  }
+
+  resume() {
+    this.game?.scene.getScene('MainScene')?.scene.resume();
+  }
+
+  destroy() {
+    this.game?.destroy(true);
+    if (FlappyGame.activeInstance === this) {
+      FlappyGame.activeInstance = null;
+    }
   }
 }

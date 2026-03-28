@@ -8,8 +8,8 @@ export class IronGame implements GameInstance {
   constructor(containerId: HTMLElement) {
     if (typeof window === 'undefined') return;
 
-    const W = Math.floor(window.innerWidth * 0.6);
-    const H = window.innerHeight;
+    const W = containerId.clientWidth || Math.floor(window.innerWidth * 0.6);
+    const H = containerId.clientHeight || window.innerHeight;
 
     const config: Phaser.Types.Core.GameConfig = {
       type: Phaser.CANVAS,
@@ -159,10 +159,10 @@ class IronScene extends Phaser.Scene {
       // Cráteres
       const craterCount = variant === 2 ? 4 : 2;
       const craterData = [
-        { cx: size*0.35, cy: size*0.38, r: size*0.10 },
-        { cx: size*0.62, cy: size*0.55, r: size*0.07 },
-        { cx: size*0.45, cy: size*0.65, r: size*0.08 },
-        { cx: size*0.25, cy: size*0.58, r: size*0.06 },
+        { cx: size * 0.35, cy: size * 0.38, r: size * 0.10 },
+        { cx: size * 0.62, cy: size * 0.55, r: size * 0.07 },
+        { cx: size * 0.45, cy: size * 0.65, r: size * 0.08 },
+        { cx: size * 0.25, cy: size * 0.58, r: size * 0.06 },
       ];
       for (let c = 0; c < craterCount; c++) {
         const cd = craterData[c];
@@ -172,14 +172,14 @@ class IronScene extends Phaser.Scene {
         ctx.fill();
         // Brillo del cráter
         ctx.beginPath();
-        ctx.arc(cd.cx - cd.r*0.2, cd.cy - cd.r*0.2, cd.r * 0.35, 0, Math.PI * 2);
+        ctx.arc(cd.cx - cd.r * 0.2, cd.cy - cd.r * 0.2, cd.r * 0.35, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255,255,255,0.08)';
         ctx.fill();
       }
 
       // Highlight general
       ctx.beginPath();
-      ctx.ellipse(size*0.3, size*0.27, size*0.12, size*0.07, -0.4, 0, Math.PI*2);
+      ctx.ellipse(size * 0.3, size * 0.27, size * 0.12, size * 0.07, -0.4, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(255,255,255,0.12)';
       ctx.fill();
 
@@ -341,18 +341,18 @@ class IronScene extends Phaser.Scene {
 
   update(_time: number, delta: number) {
     if (this.isGameOver) return;
-    
+
     this.gameTime += delta;
 
     // Aumentar velocidad cada 15 segundos
     const speedTier = Math.floor(this.gameTime / 15000);
     const timeBonus = speedTier * 20;
-    
+
     // También aumentar por score
     const scoreBonus = Math.floor(this.score / 60) * 15;
-    
+
     this.asteroidSpeed = Math.min(500, 180 + timeBonus + scoreBonus);
-    
+
     const H = this.scale.height;
     const W = this.scale.width;
 
@@ -437,24 +437,24 @@ class IronScene extends Phaser.Scene {
     const g = this.tiltIndicator;
     const H = this.scale.height;
     g.clear();
-    const bx = 28, bH = 140, bY = H/2 - 70;
+    const bx = 28, bH = 140, bY = H / 2 - 70;
     g.fillStyle(0x222222, 0.9);
-    g.fillRoundedRect(bx-10, bY, 20, bH, 10);
-    const iY = bY + bH/2 + this.currentTilt * bH/2;
+    g.fillRoundedRect(bx - 10, bY, 20, bH, 10);
+    const iY = bY + bH / 2 + this.currentTilt * bH / 2;
     const neutral = Math.abs(this.currentTilt) < 0.1;
     g.fillStyle(neutral ? 0x00ff88 : 0xff6600, 1);
     g.fillCircle(bx, iY, 9);
     g.lineStyle(2, 0x444444, 1);
-    g.lineBetween(bx-12, bY+bH/2, bx+12, bY+bH/2);
+    g.lineBetween(bx - 12, bY + bH / 2, bx + 12, bY + bH / 2);
   }
 
   showBonus(text: string) {
     const H = this.scale.height;
     this.bonusText.setText(text);
-    this.bonusText.setAlpha(1).setY(H/2);
+    this.bonusText.setAlpha(1).setY(H / 2);
     this.tweens.add({
       targets: this.bonusText,
-      y: H/2 - 90, alpha: 0,
+      y: H / 2 - 90, alpha: 0,
       duration: 1800, ease: 'Power2'
     });
   }
@@ -473,18 +473,18 @@ class IronScene extends Phaser.Scene {
     overlay.fillStyle(0x000000, 0.75);
     overlay.fillRect(0, 0, W, H);
 
-    this.add.text(W/2, H/2 - 70, '💥 GAME OVER', {
+    this.add.text(W / 2, H / 2 - 70, '💥 GAME OVER', {
       fontSize: '42px', color: '#ff4444',
       fontFamily: 'monospace',
       stroke: '#000', strokeThickness: 6
     }).setOrigin(0.5).setDepth(30);
 
-    this.add.text(W/2, H/2, `Score: ${this.score}`, {
+    this.add.text(W / 2, H / 2, `Score: ${this.score}`, {
       fontSize: '30px', color: '#ffffff',
       fontFamily: 'monospace'
     }).setOrigin(0.5).setDepth(30);
 
-    this.add.text(W/2, H/2 + 55, '¡Buen esfuerzo!', {
+    this.add.text(W / 2, H / 2 + 55, '¡Buen esfuerzo!', {
       fontSize: '20px', color: '#aaaaaa',
       fontFamily: 'monospace'
     }).setOrigin(0.5).setDepth(30);

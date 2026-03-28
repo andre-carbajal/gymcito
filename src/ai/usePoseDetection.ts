@@ -75,7 +75,8 @@ export function usePoseDetection(videoRef: React.RefObject<HTMLVideoElement | nu
     if (!video) return;
 
     let running = true;
-    const smoothingFactor = 0.4;
+    // Eliminado el delay: smoothingFactor 1.0 asegura que el punto se mueva al 100% de velocidad real (instantáneo)
+    const smoothingFactor = 1.0;
 
     async function detect() {
       if (!running || !detectorRef.current || !video) return;
