@@ -7,12 +7,13 @@ import { X, LogIn, UserPlus, Loader2 } from 'lucide-react';
 interface AuthModalProps {
   onClose: () => void;
   onAuth: () => void;
+  initialMode?: AuthMode;
 }
 
 type AuthMode = 'login' | 'register';
 
-export function AuthModal({ onClose, onAuth }: AuthModalProps) {
-  const [mode, setMode] = useState<AuthMode>('login');
+export function AuthModal({ onClose, onAuth, initialMode = 'login' }: AuthModalProps) {
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');

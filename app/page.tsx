@@ -34,6 +34,7 @@ export default function HomePage() {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [inputMode, setInputMode] = useState<'mouse' | 'camera'>('mouse');
 
   // 3D carousel state
@@ -334,31 +335,218 @@ export default function HomePage() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-5xl font-bold font-mono text-green-400 mb-4">🏋️ GYMCITO</h1>
-          <p className="text-gray-400 mb-8">Minijuegos controlados por tu cuerpo</p>
-          <div className="flex gap-6 justify-center mb-8">
-            {GAMES.map((g, i) => (
-              <span
-                key={g.slug}
-                className="text-5xl"
-                style={{ display: 'inline-block', animation: `float 3s ease-in-out ${i * 0.3}s infinite` }}
+      <div className="min-h-screen bg-[#12122a] text-white overflow-y-auto font-sans pb-20">
+        
+        {/* Full Background Hero Section */}
+        <div 
+          className="relative w-full bg-cover bg-center bg-no-repeat bg-[url('/images/Personajes.png')] md:bg-[url('/images/Personasjes-16_9.png')]"
+        >
+          {/* Overlay to ensure text readability */}
+          <div className="absolute inset-0 bg-[#12122a]/70 pointer-events-none z-0"></div>
+          
+          {/* Navbar */}
+          <nav className="max-w-7xl mx-auto px-8 py-6 flex justify-between items-center relative z-50 border-b border-white/5">
+            <div className="flex items-center gap-12">
+              <h1 className="text-2xl font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 filter drop-shadow">🏋️ GYMCITO</h1>
+              <div className="hidden md:flex gap-8 text-sm font-medium text-gray-300">
+                <a href="#juegos" className="hover:text-white transition-colors drop-shadow-md">Juegos</a>
+                <a href="#nosotros" className="hover:text-white transition-colors drop-shadow-md">Nosotros</a>
+                <a href="#ayuda" className="hover:text-white transition-colors drop-shadow-md">Ayuda</a>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 text-xs font-bold uppercase tracking-widest">
+              <button onClick={() => { setAuthMode('login'); setShowAuth(true); }} className="hover:text-cyan-400 transition-colors border border-white/20 px-5 py-2 rounded-full backdrop-blur-sm bg-black/20">
+                LOG IN
+              </button>
+              <button 
+                onClick={() => { setAuthMode('register'); setShowAuth(true); }} 
+                className="px-5 py-2 bg-gradient-to-r from-purple-600 to-cyan-600 text-white rounded-full hover:shadow-lg hover:shadow-cyan-500/30 transition-all border border-[#2a2a4a]"
               >
-                {g.emoji}
-              </span>
-            ))}
-          </div>
-          <button
-            id="start-playing-btn"
-            onClick={() => setShowAuth(true)}
-            className="px-8 py-4 bg-gradient-to-r from-purple-600 to-green-600 text-white font-bold text-lg rounded-2xl hover:from-purple-500 hover:to-green-500 transition-all duration-300 shadow-lg hover:scale-105 cursor-pointer"
-          >
-            🎮 Empezar a jugar
-          </button>
+                SIGN UP
+              </button>
+            </div>
+          </nav>
+
+          {/* Hero Content Centered */}
+          <main className="max-w-4xl mx-auto px-8 pt-32 pb-40 flex flex-col items-center justify-center text-center relative z-10">
+            <div className="mb-4">
+               <span className="px-4 py-1.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-bold tracking-widest uppercase shadow-lg backdrop-blur-md">
+                 Inteligencia Artificial
+               </span>
+            </div>
+            
+            <h1 className="text-6xl md:text-7xl font-extrabold mb-6 leading-[1.15] tracking-tight text-white drop-shadow-[0_0_30px_rgba(0,0,0,0.8)]">
+              Entrena y juega <br /> con <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">tu cuerpo</span>
+            </h1>
+            
+            <p className="text-gray-200 mb-10 text-lg leading-relaxed max-w-2xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+              Gymcito utiliza Inteligencia Artificial para rastrear tus movimientos a través de la cámara. Sin equipos, pura diversión. Mueve tu cuerpo para ganar y mantente activo.
+            </p>
+            
+            <button
+              onClick={() => { setAuthMode('login'); setShowAuth(true); }}
+              className="px-10 py-4 bg-gradient-to-r from-purple-600 to-cyan-600 text-white font-bold rounded-full hover:shadow-[0_0_25px_rgba(6,182,212,0.5)] transition-all hover:scale-105 active:scale-95 text-sm tracking-widest uppercase border border-cyan-400/30"
+            >
+              INICIAR SESIÓN
+            </button>
+          </main>
         </div>
+
+        {/* 4 Colorful Cards Row */}
+        <section id="juegos" className="max-w-7xl mx-auto px-8 pb-20 scroll-mt-32">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 pt-16 relative">
+            
+            {/* Arrows (Visual purely) */}
+            <div className="hidden lg:flex absolute left-[-40px] top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/10 items-center justify-center text-xs opacity-50 cursor-pointer hover:bg-white/20">&lt;</div>
+            <div className="hidden lg:flex absolute right-[-40px] top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/10 items-center justify-center text-xs opacity-50 cursor-pointer hover:bg-white/20">&gt;</div>
+
+            {/* Card 1: Yellow */}
+            <div className="bg-[#FEA844] rounded-3xl p-6 text-center text-white relative mt-12 hover:-translate-y-2 transition-transform shadow-xl shadow-orange-500/20 flex flex-col items-center">
+              <div className="absolute -top-10 w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-4xl shadow-lg">
+                🐦
+              </div>
+              <h3 className="text-xl font-bold mt-12 mb-3">Flappy Bird</h3>
+              <p className="text-xs opacity-90 mb-6 leading-relaxed">Ejercita tus hombros. Sube ambos brazos como alas para aletear y sobrevivir.</p>
+              <button onClick={() => setShowAuth(true)} className="mt-auto text-[10px] font-bold opacity-70 hover:opacity-100 transition-opacity uppercase tracking-widest border-b border-white/30 pb-1">VER MÁS &gt;</button>
+            </div>
+
+            {/* Card 2: Green */}
+            <div className="bg-[#46D38B] rounded-3xl p-6 text-center text-white relative mt-12 hover:-translate-y-2 transition-transform shadow-xl shadow-green-500/20 flex flex-col items-center">
+              <div className="absolute -top-10 w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-4xl shadow-lg">
+                🦕
+              </div>
+              <h3 className="text-xl font-bold mt-12 mb-3">Dino Runner</h3>
+              <p className="text-xs opacity-90 mb-6 leading-relaxed">Entrena tren inferior. Salta físicamente o haz sentadillas para esquivar obstáculos.</p>
+              <button onClick={() => setShowAuth(true)} className="mt-auto text-[10px] font-bold opacity-70 hover:opacity-100 transition-opacity uppercase tracking-widest border-b border-white/30 pb-1">VER MÁS &gt;</button>
+            </div>
+
+            {/* Card 3: Blue */}
+            <div className="bg-[#3D94FF] rounded-3xl p-6 text-center text-white relative mt-12 hover:-translate-y-2 transition-transform shadow-xl shadow-blue-500/20 flex flex-col items-center">
+              <div className="absolute -top-10 w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-4xl shadow-lg">
+                🏄
+              </div>
+              <h3 className="text-xl font-bold mt-12 mb-3">Iron Board</h3>
+              <p className="text-xs opacity-90 mb-6 leading-relaxed">Estabilidad de core. Inclina tu cuerpo para desplazar la nave suavemente.</p>
+              <button onClick={() => setShowAuth(true)} className="mt-auto text-[10px] font-bold opacity-70 hover:opacity-100 transition-opacity uppercase tracking-widest border-b border-white/30 pb-1">VER MÁS &gt;</button>
+            </div>
+
+            {/* Card 4: Red */}
+            <div className="bg-[#FF4A55] rounded-3xl p-6 text-center text-white relative mt-12 hover:-translate-y-2 transition-transform shadow-xl shadow-red-500/20 flex flex-col items-center">
+              <div className="absolute -top-10 w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-4xl shadow-lg">
+                🥊
+              </div>
+              <h3 className="text-xl font-bold mt-12 mb-3">Más Modos</h3>
+              <p className="text-xs opacity-90 mb-6 leading-relaxed">Nuevos minijuegos guiados por inteligencia artificial próximamente.</p>
+              <button onClick={() => setShowAuth(true)} className="mt-auto text-[10px] font-bold opacity-70 hover:opacity-100 transition-opacity uppercase tracking-widest border-b border-white/30 pb-1">VER MÁS &gt;</button>
+            </div>
+
+          </div>
+
+          <div className="flex justify-center mt-12">
+            <button className="px-8 py-3 bg-[#1a1a2e] border border-[#2a2a4a] text-white font-bold rounded-full hover:bg-white/10 hover:scale-105 transition-all duration-300 text-[10px] tracking-widest uppercase shadow-lg">
+              VER MÁS MODOS
+            </button>
+          </div>
+        </section>
+
+        {/* Instructions Section (Adapted from App.tsx) */}
+        <section id="ayuda" className="max-w-5xl mx-auto px-8 pb-24 scroll-mt-32">
+          <div className="bg-gradient-to-b from-[#1a1a2e] to-[#12122a] rounded-3xl border border-[#2a2a4a] p-10 md:p-14 shadow-2xl relative overflow-hidden text-center group">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-600/10 rounded-full blur-[80px] pointer-events-none group-hover:bg-cyan-600/20 transition-colors duration-700"></div>
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-600/10 rounded-full blur-[80px] pointer-events-none group-hover:bg-purple-600/20 transition-colors duration-700"></div>
+            
+            <h2 className="text-4xl font-extrabold mb-4 tracking-tight drop-shadow-md relative z-10">
+              Controla el juego con movimientos
+            </h2>
+            <p className="text-gray-400 mb-12 text-lg relative z-10">
+              ¡Salta y agáchate en la vida real para esquivar obstáculos! No necesitas controles mágicos, solo tu cámara web.
+            </p>
+            
+            <div className="grid sm:grid-cols-2 gap-8 relative z-10">
+              <div className="bg-black/30 backdrop-blur-sm p-8 rounded-2xl border border-white/5 hover:border-cyan-500/30 hover:-translate-y-2 transition-all duration-300 shadow-xl">
+                <div className="w-16 h-16 mx-auto bg-cyan-500/20 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-[0_0_20px_rgba(6,182,212,0.2)]">
+                  ⬆️
+                </div>
+                <h3 className="text-xl font-bold mb-3 text-cyan-400">Cómo Saltar</h3>
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  Da un salto físicamente hacia arriba o levanta tus hombros rápidamente frente a la cámara.
+                </p>
+              </div>
+              <div className="bg-black/30 backdrop-blur-sm p-8 rounded-2xl border border-white/5 hover:border-purple-500/30 hover:-translate-y-2 transition-all duration-300 shadow-xl">
+                <div className="w-16 h-16 mx-auto bg-purple-500/20 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-[0_0_20px_rgba(168,85,247,0.2)]">
+                  ⬇️
+                </div>
+                <h3 className="text-xl font-bold mb-3 text-purple-400">Cómo Agacharte</h3>
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  Dobla tus rodillas en una sentadilla o reduce la altura total de tu cuerpo significativamente.
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="w-full h-px bg-white/5 mt-24"></div>
+        </section>
+
+        {/* Why Playwell Section (Blobs) */}
+        <section id="nosotros" className="max-w-7xl mx-auto px-8 pb-32 text-center scroll-mt-32">
+          <h2 className="text-5xl md:text-6xl font-black mb-24 tracking-tight drop-shadow-md">¿Por qué jugar en Gymcito?</h2>
+          
+          <div className="grid md:grid-cols-3 gap-16 md:gap-20">
+            {/* Pink Blob */}
+            <div className="flex flex-col items-center text-center group">
+              <div className="relative w-48 h-48 md:w-56 md:h-56 mb-10 flex items-center justify-center transform group-hover:scale-110 group-hover:-translate-y-4 group-hover:rotate-6 transition-all duration-500 ease-out">
+                <div className="absolute inset-0 bg-[#FF65A0] rounded-[40%_60%_70%_30%/40%_50%_60%_50%] shadow-[0_20px_50px_rgba(255,101,160,0.4)]"></div>
+                <span className="relative text-7xl md:text-8xl z-10 drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]">❤️</span>
+              </div>
+              <h4 className="text-2xl font-bold mb-4 drop-shadow-sm">Mejora tu salud</h4>
+              <p className="text-sm md:text-base text-gray-400 leading-relaxed px-4 opacity-90">
+                Quema calorías y mejora tus reflejos. Cada partida es esfuerzo físico.
+              </p>
+            </div>
+
+            {/* Orange Blob */}
+            <div className="flex flex-col items-center text-center group cursor-default">
+              <div className="relative w-48 h-48 md:w-56 md:h-56 mb-10 flex items-center justify-center transform group-hover:scale-110 group-hover:-translate-y-4 group-hover:-rotate-6 transition-all duration-500 ease-out">
+                <div className="absolute inset-0 bg-[#FF6B4B] rounded-[50%_40%_30%_70%/60%_50%_40%_50%] shadow-[0_20px_50px_rgba(255,107,75,0.4)]"></div>
+                <span className="relative text-7xl md:text-8xl z-10 drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]">🧠</span>
+              </div>
+              <h4 className="text-2xl font-bold mb-4 drop-shadow-sm">Enfoque Científico</h4>
+              <p className="text-sm md:text-base text-gray-400 leading-relaxed px-4 opacity-90">
+                El IA Coach post-partida analiza tu postura y desempeño automáticamente.
+              </p>
+            </div>
+
+            {/* Cyan Blob */}
+            <div className="flex flex-col items-center text-center group cursor-default">
+              <div className="relative w-48 h-48 md:w-56 md:h-56 mb-10 flex items-center justify-center transform group-hover:scale-110 group-hover:-translate-y-4 group-hover:rotate-12 transition-all duration-500 ease-out">
+                <div className="absolute inset-0 bg-[#2BD4C1] rounded-[40%_60%_50%_50%/50%_40%_60%_40%] shadow-[0_20px_50px_rgba(43,212,193,0.4)] rounded-full animate-[pulse_4s_infinite]"></div>
+                <span className="relative text-7xl md:text-8xl z-10 drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]">👥</span>
+              </div>
+              <h4 className="text-2xl font-bold mb-4 drop-shadow-sm">Modo Multijugador</h4>
+              <p className="text-sm md:text-base text-gray-400 leading-relaxed px-4 opacity-90">
+                Agrega amigos, supera sus puntajes y mantengan un historial sano.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-center mt-32" id="ayudaCTA">
+            <button
+              onClick={() => { setAuthMode('register'); setShowAuth(true); }}
+              className="px-10 py-5 bg-gradient-to-r from-purple-600 to-cyan-600 text-white font-extrabold rounded-full hover:shadow-[0_0_35px_rgba(6,182,212,0.6)] transition-all hover:scale-105 active:scale-95 text-base tracking-widest uppercase border border-cyan-400/30"
+            >
+              JUGAR AHORA
+            </button>
+          </div>
+        </section>
+
+        {/* Footer Section */}
+        <footer className="w-full py-12 px-8 border-t border-white/5 bg-[#0a0a1a] text-center text-gray-500 relative z-20">
+          <p className="text-sm font-medium tracking-wide">🏋️ Gymcito © 2026. Haz ejercicio divirtiéndote.</p>
+        </footer>
+
         {showAuth && (
           <AuthModal
+            initialMode={authMode}
             onClose={() => setShowAuth(false)}
             onAuth={() => {
               setShowAuth(false);
@@ -379,7 +567,7 @@ export default function HomePage() {
 
       {/* ── Header ── */}
       <header className="flex justify-between items-center px-8 py-5 border-b border-gray-800">
-        <h1 className="text-2xl font-bold font-mono text-green-400">🏋️ GYMCITO</h1>
+        <h1 className="text-2xl font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 filter drop-shadow">🏋️ GYMCITO</h1>
 
         <div className="flex items-center gap-4">
           {username && (
@@ -408,22 +596,20 @@ export default function HomePage() {
             <button
               id="mode-mouse-btn"
               onClick={() => setInputMode('mouse')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                inputMode === 'mouse'
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${inputMode === 'mouse'
                   ? 'bg-purple-600 text-white shadow-lg'
                   : 'text-gray-400 hover:text-white'
-              }`}
+                }`}
             >
               🖱️ Mouse
             </button>
             <button
               id="mode-camera-btn"
               onClick={() => setInputMode('camera')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-                inputMode === 'camera'
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${inputMode === 'camera'
                   ? 'bg-green-600 text-white shadow-lg shadow-green-500/30'
                   : 'text-gray-400 hover:text-white'
-              }`}
+                }`}
             >
               📷 Cámara
             </button>
@@ -468,9 +654,8 @@ export default function HomePage() {
           <div className="w-72 flex-shrink-0 flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <div
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  cameraReady ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'
-                }`}
+                className={`w-2 h-2 rounded-full transition-colors ${cameraReady ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'
+                  }`}
               />
               <span className="text-sm text-gray-400">
                 {cameraReady ? 'Mano detectada ✋' : 'Iniciando cámara...'}
@@ -543,9 +728,8 @@ export default function HomePage() {
                     confirmStartRef.current = null;
                     setConfirmProgress(0);
                   }}
-                  className={`w-3 h-3 rounded-full transition-all cursor-pointer ${
-                    idx === centerIndex ? 'bg-green-400 scale-125' : 'bg-gray-600 hover:bg-gray-400'
-                  }`}
+                  className={`w-3 h-3 rounded-full transition-all cursor-pointer ${idx === centerIndex ? 'bg-green-400 scale-125' : 'bg-gray-600 hover:bg-gray-400'
+                    }`}
                 />
               ))}
             </div>

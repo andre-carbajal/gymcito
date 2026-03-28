@@ -51,9 +51,9 @@ export function FriendScoreComparison({
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-lg bg-[#0e0e1f] border border-[#2a2a4a] rounded-2xl shadow-2xl shadow-purple-500/10 z-10 animate-slide-up overflow-hidden">
+      <div className="relative w-full max-w-lg mx-auto bg-[#0e0e1f] border border-[#2a2a4a] rounded-2xl shadow-2xl shadow-purple-500/10 z-10 animate-slide-up flex flex-col max-h-[85vh] overflow-hidden">
         {/* Header with gradient */}
-        <div className="relative px-6 pt-6 pb-4 border-b border-[#2a2a4a]">
+        <div className="relative px-6 pt-6 pb-4 border-b border-[#2a2a4a] shrink-0">
           <div className="absolute inset-0 bg-gradient-to-r from-purple-600/10 to-cyan-600/10" />
           <button
             id="score-comparison-close-btn"
@@ -74,7 +74,7 @@ export function FriendScoreComparison({
         </div>
 
         {/* Content */}
-        <div className="px-6 py-5">
+        <div className="px-6 py-5 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
