@@ -241,6 +241,7 @@ class DinoScene extends Phaser.Scene {
       })
       .setOrigin(1, 0)
       .setDepth(5);
+    this.scoreText.setVisible(false); // Hidden in favor of HTML wrapper overlay
 
     // ── Reset all state ───────────────────────────────────────────────────────
     this.score = 0;
@@ -861,10 +862,14 @@ export class DinoGame implements GameInstance {
 
     this.game = new Phaser.Game({
       type: Phaser.CANVAS,
-      width: C.canvasWidth,   // 800
-      height: C.canvasHeight,  // 600
+      width: C.canvasWidth,   // 1050
+      height: C.canvasHeight, // 500
       parent: container,
       backgroundColor: '#111111',
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+      },
       physics: {
         default: 'arcade',
         arcade: {

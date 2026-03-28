@@ -121,7 +121,9 @@ export function AuthModal({ onClose, onAuth }: AuthModalProps) {
               </label>
               <input
                 id="auth-username"
+                name="username"
                 type="text"
+                autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="tu_nombre"
@@ -136,7 +138,9 @@ export function AuthModal({ onClose, onAuth }: AuthModalProps) {
             </label>
             <input
               id="auth-email"
+              name="email"
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="tu@email.com"
@@ -151,7 +155,9 @@ export function AuthModal({ onClose, onAuth }: AuthModalProps) {
             </label>
             <input
               id="auth-password"
+              name="password"
               type="password"
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"

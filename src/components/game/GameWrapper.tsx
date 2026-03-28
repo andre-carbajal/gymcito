@@ -5,7 +5,7 @@ import { useCamera } from '../../hooks/useCamera';
 import { useInputMode } from '../../hooks/useInputMode';
 import { usePoseDetection } from '../../ai/usePoseDetection';
 import type { Game, GameInstance } from '../../lib/types';
-import { Pause, Play, Camera } from 'lucide-react';
+import { Pause, Play, Camera, Maximize } from 'lucide-react';
 
 // ── Diagnostic prefix ────────────────────────────────────────────────────────
 const TAG = '[GameWrapper]';
@@ -17,6 +17,7 @@ interface GameWrapperProps {
 }
 
 export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<GameInstance | null>(null);
   const scoreIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -324,11 +325,51 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
     setIsPaused(!isPaused);
   }, [isPaused]);
 
+  const toggleFullscreen = useCallback(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement && el.requestFullscreen) {
+      el.requestFullscreen().catch(() => {});
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  // Auto-fullscreen on first user interaction with the game area
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+
+    const tryFullscreen = () => {
+      if (!document.fullscreenElement && el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      }
+    };
+
+    el.addEventListener('click', tryFullscreen, { once: true });
+    el.addEventListener('touchstart', tryFullscreen, { once: true });
+
+    return () => {
+      el.removeEventListener('click', tryFullscreen);
+      el.removeEventListener('touchstart', tryFullscreen);
+    };
+  }, []);
+
   return (
-    <div className="relative w-full max-w-[1100px] mx-auto">
+    <div ref={wrapperRef} className="relative w-full max-w-[1100px] mx-auto flex flex-col h-full min-h-[400px]">
+      <style suppressHydrationWarning>{`
+        :fullscreen {
+          background-color: #05050a !important;
+          padding: 1rem;
+        }
+        :fullscreen .fullscreen-hide {
+          display: none !important;
+        }
+      `}</style>
+      
       {/* Camera preview */}
       <div
-        className={`absolute top-2 right-2 z-20 w-48 h-36 rounded-xl overflow-hidden border-2 shadow-xl transition-all duration-300 ${
+        className={`absolute top-4 right-4 z-50 w-28 h-20 sm:w-32 sm:h-24 md:w-48 md:h-36 rounded-xl overflow-hidden border-2 shadow-xl transition-all duration-300 ${
           inputMode === 'camera' ? 'opacity-100 border-purple-500/60' : 'opacity-0 pointer-events-none border-transparent'
         }`}
       >
@@ -351,19 +392,22 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
       </div>
 
       {/* Score and Pause */}
-      <div className="absolute top-2 left-2 z-20 flex items-center gap-3">
-        <div className="bg-[#12122a]/90 backdrop-blur-sm border border-[#2a2a4a] rounded-xl px-4 py-2 flex items-center gap-2">
-          <span className="text-xs text-gray-400">SCORE</span>
-          <span className="text-lg font-bold text-cyan-400 font-mono">{currentScore.toLocaleString()}</span>
+      <div className="absolute top-4 left-4 z-50 flex items-center gap-2 sm:gap-3">
+        <div className="bg-[#12122a]/90 backdrop-blur-sm border border-[#2a2a4a] rounded-xl px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-2">
+          <span className="text-[10px] sm:text-xs text-gray-400">SCORE</span>
+          <span className="text-sm sm:text-lg font-bold text-cyan-400 font-mono">{currentScore.toLocaleString()}</span>
         </div>
-        <button onClick={togglePause} className="bg-[#12122a]/90 backdrop-blur-sm border border-[#2a2a4a] rounded-xl p-2.5 text-gray-400 hover:text-white cursor-pointer">
+        <button onClick={togglePause} className="bg-[#12122a]/90 backdrop-blur-sm border border-[#2a2a4a] rounded-xl p-2 sm:p-2.5 text-gray-400 hover:text-white cursor-pointer" title="Pausa">
           {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+        </button>
+        <button onClick={toggleFullscreen} className="bg-[#12122a]/90 backdrop-blur-sm border border-[#2a2a4a] rounded-xl p-2 sm:p-2.5 text-gray-400 hover:text-white cursor-pointer" title="Pantalla Completa">
+          <Maximize className="w-4 h-4" />
         </button>
       </div>
 
       {/* Input Mode Selector */}
-      <div className="absolute bottom-2 left-2 z-20">
-        <div className="bg-[#12122a]/80 backdrop-blur-sm rounded-lg px-3 py-1 flex gap-1">
+      <div className="absolute bottom-4 left-4 z-50 fullscreen-hide">
+        <div className="bg-[#12122a]/80 backdrop-blur-sm rounded-lg px-3 py-1.5 flex gap-1">
           {(['camera', 'touch', 'mouse'] as const).map((m) => (
             <button
               key={m}
@@ -381,8 +425,8 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
       {/* Game Area */}
       <div
         ref={containerRef}
-        className={`w-full rounded-2xl overflow-hidden border-2 border-[#2a2a4a] shadow-2xl relative ${
-          !gameStarted ? 'min-h-[400px] flex items-center justify-center bg-[#0f0f23]' : ''
+        className={`w-full flex-1 rounded-2xl overflow-hidden border-2 border-[#2a2a4a] shadow-2xl relative ${
+          !gameStarted ? 'min-h-[400px] flex items-center justify-center bg-[#0f0f23]' : 'min-h-[400px]'
         }`}
       >
         {!gameStarted && <div className="text-gray-500 text-sm animate-pulse">Cargando juego...</div>}

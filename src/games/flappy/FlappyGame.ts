@@ -128,7 +128,7 @@ class MainScene extends Phaser.Scene {
     this.birdHitbox.body.setGravityY(600);
 
     this.flap();
-    this.scoreText.setVisible(true);
+    // this.scoreText.setVisible(true); // Hidden in favor of HTML wrapper overlay
     this.spawnPipes();
 
     this.pipeEvent = this.time.addEvent({

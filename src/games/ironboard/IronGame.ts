@@ -223,7 +223,7 @@ class IronScene extends Phaser.Scene {
       fontSize: '24px', color: '#ffffff',
       fontFamily: 'monospace',
       stroke: '#000000', strokeThickness: 4
-    }).setDepth(10);
+    }).setDepth(10).setVisible(false); // Hidden in favor of HTML wrapper overlay
 
     this.postureText = this.add.text(W / 2, 16, '', {
       fontSize: '18px', color: '#00ff88',

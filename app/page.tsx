@@ -79,7 +79,13 @@ export default function HomePage() {
 
   // ── Auth ────────────────────────────────────────────────────────
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data: { session: s } }) => {
+    void supabase.auth.getSession().then(({ data: { session: s }, error }) => {
+      if (error) {
+        void supabase.auth.signOut().catch(() => {});
+        setSession(null);
+        setLoading(false);
+        return;
+      }
       setSession(s);
       setLoading(false);
       if (s?.user) {
@@ -94,9 +100,14 @@ export default function HomePage() {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
-      if (!s) setLoading(false);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
+        setLoading(false);
+      } else {
+        setSession(s);
+        if (!s) setLoading(false);
+      }
     });
 
     return () => subscription.unsubscribe();
