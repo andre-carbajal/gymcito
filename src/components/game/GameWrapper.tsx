@@ -32,6 +32,7 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
   const [currentScore, setCurrentScore] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
+  const [isIOSFullscreen, setIsIOSFullscreen] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<'desert' | 'jungle' | 'night'>('desert');
 
   // ── Gesture detection state ────────────────────────────────────────────────
@@ -319,21 +320,49 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
     });
   }, [keypoints, inputMode, getPoint]);
 
-  const togglePause = useCallback(() => {
+  const togglePause = useCallback((e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) e.stopPropagation();
     if (!gameRef.current) return;
     if (isPaused) gameRef.current.resume(); else gameRef.current.pause();
-    setIsPaused(!isPaused);
+    setIsPaused((prev) => !prev);
   }, [isPaused]);
 
-  const toggleFullscreen = useCallback(() => {
+  const toggleFullscreen = useCallback((e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) e.stopPropagation();
     const el = wrapperRef.current;
     if (!el) return;
-    if (!document.fullscreenElement && el.requestFullscreen) {
-      el.requestFullscreen().catch(() => {});
-    } else if (document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {});
+
+    if (isIOSFullscreen) {
+      setIsIOSFullscreen(false);
+      return;
     }
-  }, []);
+
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    } else if (el.requestFullscreen) {
+      el.requestFullscreen().catch(() => {
+        // Fallback applied specifically when Fullscreen API is rejected (common on iOS/Safari)
+        setIsIOSFullscreen(true);
+      });
+    } else if ((el as any).webkitRequestFullscreen) {
+      (el as any).webkitRequestFullscreen();
+    } else {
+      // Complete fallback for devices lacking any Fullscreen API implementation
+      setIsIOSFullscreen(true);
+    }
+  }, [isIOSFullscreen]);
+
+  // Lock body scroll when iOS fullscreen fallback is active
+  useEffect(() => {
+    if (isIOSFullscreen) {
+      document.body.style.setProperty('overflow', 'hidden', 'important');
+    } else {
+      document.body.style.removeProperty('overflow');
+    }
+    return () => {
+      document.body.style.removeProperty('overflow');
+    };
+  }, [isIOSFullscreen]);
 
   // Auto-fullscreen on first user interaction with the game area
   useEffect(() => {
@@ -341,6 +370,7 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
     if (!el) return;
 
     const tryFullscreen = () => {
+      // Fails silently on iOS since user gesture must strictly map to requestFullscreen, not through this listener pattern typically
       if (!document.fullscreenElement && el.requestFullscreen) {
         el.requestFullscreen().catch(() => {});
       }
@@ -356,7 +386,14 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
   }, []);
 
   return (
-    <div ref={wrapperRef} className="relative w-full max-w-[1100px] mx-auto flex flex-col h-full min-h-[400px]">
+    <div 
+      ref={wrapperRef} 
+      className={
+        isIOSFullscreen 
+          ? "fixed inset-0 z-[9999] bg-[#05050a] flex flex-col p-4 w-[100vw] h-[100vh]" 
+          : "relative w-full max-w-[1100px] mx-auto flex flex-col h-full min-h-[400px]"
+      }
+    >
       <style suppressHydrationWarning>{`
         :fullscreen {
           background-color: #05050a !important;
@@ -365,6 +402,11 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
         :fullscreen .fullscreen-hide {
           display: none !important;
         }
+        ${isIOSFullscreen ? `
+          .fullscreen-hide {
+             display: none !important;
+          }
+        ` : ''}
       `}</style>
       
       {/* Camera preview */}
@@ -397,11 +439,21 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
           <span className="text-[10px] sm:text-xs text-gray-400">SCORE</span>
           <span className="text-sm sm:text-lg font-bold text-cyan-400 font-mono">{currentScore.toLocaleString()}</span>
         </div>
-        <button onClick={togglePause} className="bg-[#12122a]/90 backdrop-blur-sm border border-[#2a2a4a] rounded-xl p-2 sm:p-2.5 text-gray-400 hover:text-white cursor-pointer" title="Pausa">
-          {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+        <button 
+          onClick={togglePause} 
+          onTouchEnd={(e) => { e.preventDefault(); togglePause(e); }}
+          className="bg-[#12122a]/90 backdrop-blur-sm border border-[#2a2a4a] rounded-xl p-2 sm:p-2.5 text-gray-400 hover:text-white cursor-pointer touch-manipulation" 
+          title="Pausa"
+        >
+          {isPaused ? <Play className="w-4 h-4 pointer-events-none" /> : <Pause className="w-4 h-4 pointer-events-none" />}
         </button>
-        <button onClick={toggleFullscreen} className="bg-[#12122a]/90 backdrop-blur-sm border border-[#2a2a4a] rounded-xl p-2 sm:p-2.5 text-gray-400 hover:text-white cursor-pointer" title="Pantalla Completa">
-          <Maximize className="w-4 h-4" />
+        <button 
+          onClick={toggleFullscreen} 
+          onTouchEnd={(e) => { e.preventDefault(); toggleFullscreen(e); }}
+          className="bg-[#12122a]/90 backdrop-blur-sm border border-[#2a2a4a] rounded-xl p-2 sm:p-2.5 text-gray-400 hover:text-white cursor-pointer touch-manipulation" 
+          title="Pantalla Completa"
+        >
+          <Maximize className="w-4 h-4 pointer-events-none" />
         </button>
       </div>
 
