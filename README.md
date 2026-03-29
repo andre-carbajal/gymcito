@@ -1,6 +1,12 @@
 # 🎮 Gymcito
 
+> **Proyecto desarrollado para el hackathon [Road to Build with AI - Tacna 2026](https://gdg.community.dev/events/details/google-gdg-tacna-presents-road-to-build-with-ai-tacna-2026/), organizado por [GDG Tacna](https://gdg.community.dev/gdg-tacna/).**
+
 Plataforma web con **3 minijuegos controlados por cámara** usando detección de postura corporal (MoveNet). También soporta control por touch y mouse.
+
+🚀 **[Prueba el Demo en Vivo](https://gymcito.vercel.app/)**
+
+---
 
 ## 🕹️ Juegos
 
@@ -23,7 +29,7 @@ Plataforma web con **3 minijuegos controlados por cámara** usando detección de
 ### 1. Clonar el repositorio
 
 ```bash
-git clone https://github.com/tu-usuario/gymcito.git
+git clone https://github.com/andre-carbajal/gymcito.git
 cd gymcito
 ```
 
@@ -36,8 +42,9 @@ cp .env.example .env.local
 Edita `.env.local` con tus credenciales de Supabase:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=c
 NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
+OPENAI_API_KEY=tu-api-key
 ```
 
 ### 3. Configurar Supabase
@@ -74,52 +81,67 @@ Visita [http://localhost:3000](http://localhost:3000)
 
 ```
 gymcito/
-├── app/                          # Rutas Next.js (App Router)
-│   ├── layout.tsx                # Layout raíz
-│   ├── page.tsx                  # Página principal (menú)
-│   ├── globals.css               # Estilos globales
-│   └── game/
-│       └── [slug]/
-│           └── page.tsx          # Página de juego dinámica
-├── src/
-│   ├── ai/
-│   │   └── usePoseDetection.ts   # Hook de detección de pose (MoveNet)
-│   ├── hooks/
-│   │   ├── useCamera.ts          # Hook de cámara
-│   │   └── useInputMode.ts       # Hook de modo de input
-│   ├── lib/
-│   │   ├── supabase.ts           # Cliente Supabase + helpers
-│   │   └── types.ts              # Tipos TypeScript
-│   ├── components/
-│   │   ├── game/
-│   │   │   └── GameWrapper.tsx   # Wrapper de juegos con input bridging
-│   │   └── ui/
-│   │       ├── AuthModal.tsx     # Modal de login/registro
-│   │       ├── InputModeSelector.tsx # Selector de modo de input
-│   │       └── Leaderboard.tsx   # Leaderboard en tiempo real
-│   └── games/
-│       ├── flappy/
-│       │   └── FlappyGame.ts     # Motor Flappy Bird (Phaser 3)
-│       ├── dino/
-│       │   └── DinoGame.ts       # Motor Dino Runner (Phaser 3)
-│       └── ironboard/
-│           └── IronGame.ts       # Motor Iron Board (Phaser 3)
-├── supabase/
-│   └── migrations/
-│       └── 001_initial_schema.sql # Schema de base de datos
-├── .env.example
+├── app
+│   ├── api
+│   │   └── coach
+│   │       └── route.ts
+│   ├── game
+│   │   └── [slug]
+│   │       └── page.tsx
+│   ├── favicon.ico
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx
+├── public
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
+├── src
+│   ├── ai
+│   │   └── usePoseDetection.ts
+│   ├── components
+│   │   ├── game
+│   │   │   └── GameWrapper.tsx
+│   │   └── ui
+│   │       ├── AuthModal.tsx
+│   │       ├── FriendScoreComparison.tsx
+│   │       ├── FriendsPanel.tsx
+│   │       ├── GameCard.tsx
+│   │       ├── GameCard3D.tsx
+│   │       ├── HandCursor.tsx
+│   │       ├── InputModeSelector.tsx
+│   │       └── Leaderboard.tsx
+│   ├── games
+│   │   ├── dino
+│   │   │   ├── DinoConfig.ts
+│   │   │   └── DinoGame.ts
+│   │   ├── flappy
+│   │   │   ├── FlappyGame.ts
+│   │   │   └── FlappyVisuals.ts
+│   │   └── ironboard
+│   │       └── IronGame.ts
+│   ├── hooks
+│   │   ├── useCamera.ts
+│   │   └── useInputMode.ts
+│   └── lib
+│       ├── coach.ts
+│       ├── mediapipe-stub.js
+│       ├── supabase.ts
+│       └── types.ts
+├── supabase
+│   └── migrations
+│       ├── 001_initial_schema.sql
+│       └── 002_friends_schema.sql
+├── .gitignore
+├── README.md
+├── eslint.config.mjs
+├── next.config.ts
 ├── package.json
-└── README.md
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
+├── postcss.config.mjs
+├── tsconfig.json
+└── typescript_errors.txt
 ```
-
-## 🎯 Modos de Input
-
-| Modo | Descripción |
-|------|-------------|
-| 📷 **Cámara** | Detección de postura con MoveNet |
-| 👆 **Touch** | Gestos táctiles en móvil |
-| 🖱️ **Mouse** | Click y teclado en escritorio |
-
-## 📄 Licencia
-
-MIT
