@@ -63,6 +63,7 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
     if (!containerRef.current || typeof window === 'undefined') return;
 
     let game: GameInstance | null = null;
+    let isMounted = true; // 1. Flag para saber si el componente sigue vivo
 
     async function loadGame() {
       if (!containerRef.current) return;
@@ -72,16 +73,19 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
         switch (gameId) {
           case 'flappy': {
             const { FlappyGame } = await import('@/src/games/flappy/FlappyGame');
+            if (!isMounted) return; // 2. Abortar si se desmontó durante la descarga
             game = new FlappyGame(containerRef.current);
             break;
           }
           case 'dino': {
             const { DinoGame } = await import('@/src/games/dino/DinoGame');
+            if (!isMounted) return;
             game = new DinoGame(containerRef.current as HTMLElement);
             break;
           }
           case 'ironboard': {
             const { IronGame } = await import('@/src/games/ironboard/IronGame');
+            if (!isMounted) return;
             game = new IronGame(containerRef.current);
             break;
           }
@@ -92,6 +96,12 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
       }
 
       if (game) {
+        // Doble verificación por si el desmontaje ocurrió justo después del new Game()
+        if (!isMounted) {
+          game.destroy();
+          return;
+        }
+
         gameRef.current = game;
         game.onGameOver((finalScore) => {
           onGameOver(finalScore);
@@ -114,6 +124,7 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
     void loadGame();
 
     return () => {
+      isMounted = false; // 3. Marcar como desmontado para matar procesos huérfanos
       if (scoreIntervalRef.current) {
         clearInterval(scoreIntervalRef.current);
       }
@@ -226,12 +237,14 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
     }
   }, [keypoints, inputMode, gameId, getPoint]);
 
-  // Mouse / keyboard input
+  // Mouse / Keyboard / Touch input
   useEffect(() => {
-    if (inputMode !== 'mouse' || !gameRef.current) return;
+    if ((inputMode !== 'mouse' && inputMode !== 'touch') || !gameRef.current) return;
     const game = gameRef.current;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // solo procesar teclas si no está en modo touch
+      if (inputMode !== 'mouse') return;
       if (gameId === 'flappy' && (e.code === 'Space' || e.code === 'ArrowUp')) {
         e.preventDefault();
         game.triggerFlap?.();
@@ -249,34 +262,52 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
+      if (inputMode !== 'mouse') return;
       if (gameId === 'dino' && e.code === 'ArrowDown') {
         game.triggerStandUp?.();
       }
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (clientX: number) => {
       if (gameId === 'ironboard' && containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
-        const tilt = (e.clientX - centerX) / (rect.width / 2);
+        const tilt = (clientX - centerX) / (rect.width / 2);
         game.setTilt?.(Math.max(-1, Math.min(1, tilt)));
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (inputMode === 'mouse') handlePointerMove(e.clientX);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (inputMode === 'touch') {
+        e.preventDefault(); // prevenir scroll si swipea en el juego
+        handlePointerMove(e.touches[0].clientX);
       }
     };
 
     const handleClick = () => {
       if (gameId === 'flappy') game.triggerFlap?.();
+      if (gameId === 'dino' && inputMode === 'touch') game.triggerJump?.();
     };
+
+    // Agregar touch listeners al contenedor
+    const container = containerRef.current;
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('mousemove', handleMouseMove);
-    containerRef.current?.addEventListener('click', handleClick);
+    container?.addEventListener('click', handleClick);
+    container?.addEventListener('touchmove', handleTouchMove, { passive: false });
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('mousemove', handleMouseMove);
-      containerRef.current?.removeEventListener('click', handleClick);
+      container?.removeEventListener('click', handleClick);
+      container?.removeEventListener('touchmove', handleTouchMove);
     };
   }, [inputMode, gameId]);
 
@@ -381,8 +412,8 @@ export function GameWrapper({ gameId, onScore, onGameOver }: GameWrapperProps) {
       {/* Game Area */}
       <div
         ref={containerRef}
-        className={`w-full rounded-2xl overflow-hidden border-2 border-[#2a2a4a] shadow-2xl relative ${
-          !gameStarted ? 'min-h-[400px] flex items-center justify-center bg-[#0f0f23]' : ''
+        className={`w-full aspect-video min-h-[400px] md:min-h-[500px] rounded-2xl overflow-hidden border-2 border-[#2a2a4a] shadow-2xl relative bg-[#0f0f23] ${
+          !gameStarted ? 'flex items-center justify-center' : ''
         }`}
       >
         {!gameStarted && <div className="text-gray-500 text-sm animate-pulse">Cargando juego...</div>}

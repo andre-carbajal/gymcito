@@ -8,6 +8,10 @@ export class IronGame implements GameInstance {
   constructor(containerId: HTMLElement) {
     if (typeof window === 'undefined') return;
 
+    // Remove any orphaned <canvas> elements left by React StrictMode double-mounts.
+    // Without this, you see a frozen unmovable game rendered on top of the active one.
+    containerId.querySelectorAll('canvas').forEach((c) => c.remove());
+
     const W = containerId.clientWidth || Math.floor(window.innerWidth * 0.6);
     const H = containerId.clientHeight || window.innerHeight;
 
@@ -38,7 +42,7 @@ export class IronGame implements GameInstance {
   }
 
   setTilt(angle: number) {
-    if (!this.phaserGame) return;
+    if (!this.phaserGame || isNaN(angle)) return;
     const scene = this.phaserGame.scene.getScene('IronScene') as any;
     if (scene) scene.currentTilt = angle;
   }
@@ -98,13 +102,8 @@ class IronScene extends Phaser.Scene {
   private perfectPostureAccum: number = 0;
   private lastSpeedIncrease: number = 0;
   private shipVelocityX: number = 0;
-
   private gameTime: number = 0;
   private spawnAccum: number = 0;
-  private edgeTimer: number = 0;
-  private lastEdgeSide: 'left' | 'right' | null = null;
-  private readonly EDGE_THRESHOLD = 80;
-  private readonly EDGE_PUNISH_MS = 3000;
 
   private gameStarted: boolean = false;
   private countdownText!: Phaser.GameObjects.Text;
@@ -214,6 +213,8 @@ class IronScene extends Phaser.Scene {
     const shipBody = this.ship.body as Phaser.Physics.Arcade.Body;
     shipBody.setCollideWorldBounds(true);
     shipBody.setSize(40, 50);
+    shipBody.setImmovable(true);
+    shipBody.allowGravity = false;
 
     // Asteroides
     this.asteroids = this.physics.add.group({ enableBody: false } as any);
@@ -377,9 +378,6 @@ class IronScene extends Phaser.Scene {
     const H = this.scale.height;
     const W = this.scale.width;
 
-    // Forzar posición Y de la nave para evitar que "caiga" o se mueva abajo
-    this.ship.y = H - 100;
-
     // Aumentar velocidad cada 15 segundos (solo si ya empezó)
     if (this.gameStarted) {
       const speedTier = Math.floor(this.gameTime / 15000);
@@ -389,50 +387,19 @@ class IronScene extends Phaser.Scene {
     }
 
     // Mover nave con suavizado
-    const targetVX = this.currentTilt * 400;
+    const targetVX = (isNaN(this.currentTilt) ? 0 : this.currentTilt) * 400;
+    
+    // Evitar que la velocidad se corrompa a NaN si ocurre un fallo matemático
+    if (isNaN(this.shipVelocityX)) this.shipVelocityX = 0;
+    
     this.shipVelocityX += (targetVX - this.shipVelocityX) * 0.12;
     const body = this.ship.body as Phaser.Physics.Arcade.Body;
     body.setVelocityX(this.shipVelocityX);
-    this.ship.setRotation(this.currentTilt * 0.28);
+    this.ship.setRotation((isNaN(this.currentTilt) ? 0 : this.currentTilt) * 0.28);
 
-    const isAtLeft = this.ship.x < this.EDGE_THRESHOLD;
-    const isAtRight = this.ship.x > W - this.EDGE_THRESHOLD;
-
-    if (isAtLeft || isAtRight) {
-      const side: 'left' | 'right' = isAtLeft ? 'left' : 'right';
-
-      if (this.lastEdgeSide === side) {
-        this.edgeTimer += delta;
-      } else {
-        this.edgeTimer = 0;
-        this.lastEdgeSide = side;
-      }
-
-      // Advertencia progresiva
-      const secondsLeft = Math.ceil((this.EDGE_PUNISH_MS - this.edgeTimer) / 1000);
-      if (this.edgeTimer > 500) {
-        this.postureText.setText(`⚠️ ¡Sal del borde! ${secondsLeft}s`);
-        this.postureText.setColor('#ff4444');
-      }
-
-      // Parpadeo de la nave al acercarse al límite
-      if (this.edgeTimer > 2000) {
-        this.ship.setAlpha(this.ship.alpha === 1 ? 0.4 : 1);
-      }
-
-      // Muerte instantánea al llegar a 3 segundos
-      if (this.edgeTimer >= this.EDGE_PUNISH_MS) {
-        this.handleCollision();
-        return;
-      }
-    } else {
-      this.edgeTimer = 0;
-      this.lastEdgeSide = null;
-      this.ship.setAlpha(1);
-      // Restaurar color del postureText si estaba en rojo
-      if (this.postureText.style.color === '#ff4444') {
-        this.postureText.setColor('#00ff88');
-      }
+    // Restaurar color del postureText si había algún error
+    if (this.postureText.style.color === '#ff4444') {
+      this.postureText.setColor('#00ff88');
     }
 
     // Postura perfecta
